@@ -1,40 +1,94 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-interface ItemFormulario {
+type Categoria = "bolos" | "combos" | "doces";
+
+interface ProdutoEstoque {
+  id: string;
   nome: string;
+  categoria: Categoria;
+  preco: string;
+  precoValor?: number;
   quantidade: number;
-  observacoes: string;
+  ativo: boolean;
+}
+
+interface ItemCarrinho {
+  productId: string;
+  nome: string;
+  categoria: Categoria;
+  quantidade: number;
 }
 
 export default function PedidoOnline() {
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefone, setTelefone] = useState("");
   const [observacoesGerais, setObservacoesGerais] = useState("");
-  const [itensTexto, setItensTexto] = useState("");
+  const [tipoEntrega, setTipoEntrega] = useState<"entrega" | "retirada">(
+    "retirada"
+  );
+  const [endereco, setEndereco] = useState("");
+  const [produtos, setProdutos] = useState<ProdutoEstoque[]>([]);
+  const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [erroCarregandoProdutos, setErroCarregandoProdutos] = useState<
+    string | null
+  >(null);
 
-  const parseItens = (): ItemFormulario[] => {
-    return itensTexto
-      .split("\n")
-      .map((linha) => linha.trim())
-      .filter(Boolean)
-      .map((linha) => {
-        // Formato sugerido: "2x Bolo de brigadeiro - sem lactose"
-        const quantidadeMatch = linha.match(/^(\d+)[xX]\s*(.*)$/);
-        let quantidade = 1;
-        let resto = linha;
-        if (quantidadeMatch) {
-          quantidade = Number(quantidadeMatch[1]) || 1;
-          resto = quantidadeMatch[2];
-        }
-        const [nome, obs] = resto.split(" - ");
-        return {
-          nome: nome.trim(),
-          quantidade,
-          observacoes: obs ? obs.trim() : "",
-        };
-      });
+  useEffect(() => {
+    const carregarProdutos = async () => {
+      try {
+        const resp = await fetch("http://localhost:4000/estoque");
+        if (!resp.ok) throw new Error("Falha ao carregar estoque");
+        const data = (await resp.json()) as ProdutoEstoque[];
+        setProdutos(
+          data.filter((p) => p.ativo !== false && (p.quantidade || 0) > 0)
+        );
+      } catch (e) {
+        console.error(e);
+        setErroCarregandoProdutos(
+          "Não foi possível carregar os produtos disponíveis. Tente novamente mais tarde."
+        );
+      }
+    };
+    carregarProdutos();
+  }, []);
+
+  const adicionarAoCarrinho = (produto: ProdutoEstoque) => {
+    setCarrinho((atual) => {
+      const existente = atual.find((i) => i.productId === produto.id);
+      if (existente) {
+        if (existente.quantidade >= produto.quantidade) return atual;
+        return atual.map((i) =>
+          i.productId === produto.id
+            ? { ...i, quantidade: i.quantidade + 1 }
+            : i
+        );
+      }
+      if (produto.quantidade <= 0) return atual;
+      return [
+        ...atual,
+        {
+          productId: produto.id,
+          nome: produto.nome,
+          categoria: produto.categoria,
+          quantidade: 1,
+        },
+      ];
+    });
+  };
+
+  const alterarQuantidadeCarrinho = (productId: string, delta: number) => {
+    setCarrinho((atual) => {
+      return atual
+        .map((item) => {
+          if (item.productId !== productId) return item;
+          const nova = item.quantidade + delta;
+          if (nova <= 0) return null;
+          return { ...item, quantidade: nova };
+        })
+        .filter((x): x is ItemCarrinho => x !== null);
+    });
   };
 
   const handleEnviar = async (event: React.FormEvent) => {
@@ -46,9 +100,13 @@ export default function PedidoOnline() {
       return;
     }
 
-    const itens = parseItens();
-    if (itens.length === 0) {
-      setMensagem("Adicione pelo menos 1 item ao pedido.");
+    if (tipoEntrega === "entrega" && !endereco.trim()) {
+      setMensagem("Informe o endereço completo para entrega.");
+      return;
+    }
+
+    if (carrinho.length === 0) {
+      setMensagem("Adicione pelo menos 1 produto ao carrinho.");
       return;
     }
 
@@ -63,7 +121,9 @@ export default function PedidoOnline() {
           nomeCliente,
           telefone,
           observacoesGerais,
-          itens,
+          itens: carrinho,
+          tipoEntrega,
+          endereco,
           origem: "formulario-cliente",
         }),
       });
@@ -73,10 +133,15 @@ export default function PedidoOnline() {
       }
 
       setMensagem(
-        "Pedido enviado com sucesso! A Dona Formiga vai entrar em contato pelo WhatsApp para confirmar."
+        tipoEntrega === "entrega"
+          ? "Pedido enviado com sucesso! Pagamento via PIX abaixo. Assim que o pagamento for confirmado pelo WhatsApp, sua entrega será programada."
+          : "Pedido enviado com sucesso! Pagamento via PIX abaixo. Assim que o pagamento for confirmado pelo WhatsApp, sua retirada poderá ser realizada."
       );
-      setItensTexto("");
       setObservacoesGerais("");
+      if (tipoEntrega === "retirada") {
+        setEndereco("");
+      }
+      setCarrinho([]);
     } catch (e) {
       console.error(e);
       setMensagem(
@@ -124,6 +189,47 @@ export default function PedidoOnline() {
         >
           <div>
             <label className="block text-xs font-semibold text-rose-700 mb-1">
+              Forma
+            </label>
+            <div className="flex gap-3 text-xs">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  className="accent-rose-500"
+                  checked={tipoEntrega === "retirada"}
+                  onChange={() => setTipoEntrega("retirada")}
+                />
+                Retirada no local
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  className="accent-rose-500"
+                  checked={tipoEntrega === "entrega"}
+                  onChange={() => setTipoEntrega("entrega")}
+                />
+                Entrega (+ R$ 3,00)
+              </label>
+            </div>
+          </div>
+
+          {tipoEntrega === "entrega" && (
+            <div>
+              <label className="block text-xs font-semibold text-rose-700 mb-1">
+                Endereço para entrega*
+              </label>
+              <textarea
+                value={endereco}
+                onChange={(e) => setEndereco(e.target.value)}
+                placeholder="Rua, número, bairro, ponto de referência..."
+                rows={2}
+                className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400 resize-none text-sm"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-rose-700 mb-1">
               Seu nome*
             </label>
             <input
@@ -150,17 +256,89 @@ export default function PedidoOnline() {
 
           <div>
             <label className="block text-xs font-semibold text-rose-700 mb-1">
-              Itens do pedido*
+              Selecione os produtos*
             </label>
-            <textarea
-              value={itensTexto}
-              onChange={(e) => setItensTexto(e.target.value)}
-              placeholder={
-                "Exemplos:\n2x Bolo de brigadeiro - sem lactose\n1x Combo festa - 50 docinhos sortidos"
-              }
-              rows={5}
-              className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400 resize-none text-sm"
-            />
+            {erroCarregandoProdutos ? (
+              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
+                {erroCarregandoProdutos}
+              </p>
+            ) : produtos.length === 0 ? (
+              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
+                No momento não há produtos disponíveis no cardápio.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
+                {produtos.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => adicionarAoCarrinho(p)}
+                    className="text-left bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-2xl px-3 py-2 text-xs transition-colors"
+                  >
+                    <p className="font-semibold text-rose-900">{p.nome}</p>
+                    <p className="text-[11px] text-rose-500">
+                      {p.categoria === "bolos" && "Bolo"}
+                      {p.categoria === "combos" && "Combo"}
+                      {p.categoria === "doces" && "Doce"}
+                    </p>
+                    <p className="text-[11px] text-rose-700">{p.preco}</p>
+                    <p className="text-[10px] text-rose-500">
+                      Disponível: {p.quantidade}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-rose-700 mb-1">
+              Carrinho
+            </label>
+            {carrinho.length === 0 ? (
+              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
+                Nenhum produto no carrinho ainda. Clique nos produtos acima para
+                adicionar.
+              </p>
+            ) : (
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2 max-h-40 overflow-y-auto text-xs space-y-1">
+                {carrinho.map((item) => (
+                  <div
+                    key={item.productId}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <div>
+                      <p className="font-semibold text-rose-900">
+                        {item.nome}
+                      </p>
+                      <p className="text-[11px] text-rose-500">
+                        Quantidade: {item.quantidade}
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          alterarQuantidadeCarrinho(item.productId, -1)
+                        }
+                        className="px-2 py-1 rounded-full bg-white text-rose-700 text-[11px] font-semibold border border-rose-200 hover:bg-rose-100"
+                      >
+                        -1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          alterarQuantidadeCarrinho(item.productId, 1)
+                        }
+                        className="px-2 py-1 rounded-full bg-white text-rose-700 text-[11px] font-semibold border border-rose-200 hover:bg-rose-100"
+                      >
+                        +1
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -174,6 +352,18 @@ export default function PedidoOnline() {
               rows={3}
               className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400 resize-none text-sm"
             />
+          </div>
+
+          <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
+            <p className="font-semibold mb-1">Pagamento via PIX</p>
+            <p>
+              Chave: <span className="font-mono font-bold">07078804597</span>
+            </p>
+            <p className="mt-1">
+              {tipoEntrega === "entrega"
+                ? "Será cobrada taxa fixa de R$ 3,00 pela entrega."
+                : "Para retirada, efetue o pagamento e aguarde a confirmação pelo WhatsApp antes de vir buscar."}
+            </p>
           </div>
 
           {mensagem && (

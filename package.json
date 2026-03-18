@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node node_modules/vite/bin/vite.js build",
     "build:nw": "vite build && copy nw-package.json dist\\package.json",
     "preview": "vite preview",
     "server": "node server/index.cjs"
@@ -14,14 +14,13 @@
     "@headlessui/react": "^1.7.18",
     "cannon-es": "^0.20.0",
     "clsx": "^2.1.0",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
     "framer-motion": "^11.0.8",
     "gsap": "^3.13.0",
     "highcharts": "^12.5.0",
     "highcharts-3d": "^0.1.7",
     "highcharts-react-official": "^3.2.3",
-    "cors": "^2.8.5",
     "i18next": "^23.10.1",
     "i18next-browser-languagedetector": "^7.2.0",
     "lucide-react": "^0.533.0",
@@ -34,7 +33,6 @@
     "recharts": "^3.8.0",
     "three": "^0.179.1",
     "xlsx": "^0.18.5",
-    "express": "^4.21.2",
     "zod": "^3.25.67",
     "zustand": "^4.4.7"
   },

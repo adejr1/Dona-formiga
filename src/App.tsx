@@ -2,10 +2,19 @@ import { useMemo, useState } from "react";
 import Cardapio from "./pages/cardapio/Cardapio";
 import Home from "./pages/home/Home";
 import Pedidos from "./pages/pedidos/Pedidos";
+import HistoricoPedidos from "./pages/historico/HistoricoPedidos";
+import Estoque from "./pages/estoque/Estoque";
+import Gastos from "./pages/gastos/Gastos";
 import PedidoOnline from "./pages/cliente/PedidoOnline";
 import ErrorBoundary from "./components/ErrorBoundary";
 
-type AbaPrincipal = "inicio" | "cardapio" | "pedidos";
+type AbaPrincipal =
+  | "inicio"
+  | "cardapio"
+  | "pedidos"
+  | "historico"
+  | "estoque"
+  | "gastos";
 
 function App() {
   const [abaAtiva, setAbaAtiva] = useState<AbaPrincipal>("inicio");
@@ -67,6 +76,16 @@ function App() {
               Pedidos
             </button>
             <button
+              onClick={() => setAbaAtiva("historico")}
+              className={`w-full text-left px-4 py-3 rounded-2xl text-sm font-semibold transition-all ${
+                abaAtiva === "historico"
+                  ? "bg-rose-100 text-rose-800 shadow-lg shadow-rose-900/20"
+                  : "text-rose-50/80 hover:bg-rose-500/50 hover:text-white"
+              }`}
+            >
+              Histórico
+            </button>
+            <button
               onClick={() => setAbaAtiva("cardapio")}
               className={`w-full text-left px-4 py-3 rounded-2xl text-sm font-semibold transition-all ${
                 abaAtiva === "cardapio"
@@ -75,6 +94,26 @@ function App() {
               }`}
             >
               Cardápio
+            </button>
+            <button
+              onClick={() => setAbaAtiva("estoque")}
+              className={`w-full text-left px-4 py-3 rounded-2xl text-sm font-semibold transition-all ${
+                abaAtiva === "estoque"
+                  ? "bg-rose-100 text-rose-800 shadow-lg shadow-rose-900/20"
+                  : "text-rose-50/80 hover:bg-rose-500/50 hover:text-white"
+              }`}
+            >
+              Estoque
+            </button>
+            <button
+              onClick={() => setAbaAtiva("gastos")}
+              className={`w-full text-left px-4 py-3 rounded-2xl text-sm font-semibold transition-all ${
+                abaAtiva === "gastos"
+                  ? "bg-rose-100 text-rose-800 shadow-lg shadow-rose-900/20"
+                  : "text-rose-50/80 hover:bg-rose-500/50 hover:text-white"
+              }`}
+            >
+              Gastos
             </button>
           </nav>
 
@@ -87,7 +126,10 @@ function App() {
         <main className="flex-1">
           {abaAtiva === "inicio" && <Home />}
           {abaAtiva === "pedidos" && <Pedidos />}
+          {abaAtiva === "historico" && <HistoricoPedidos />}
           {abaAtiva === "cardapio" && <Cardapio />}
+          {abaAtiva === "estoque" && <Estoque />}
+          {abaAtiva === "gastos" && <Gastos />}
         </main>
       </div>
     </ErrorBoundary>

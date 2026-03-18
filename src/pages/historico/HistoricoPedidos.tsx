@@ -22,24 +22,10 @@ interface Pedido {
   valorTotal?: number;
 }
 
-export default function Pedidos() {
+export default function HistoricoPedidos() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-
-  const atualizarStatus = async (id: string, status: string) => {
-    try {
-      const resp = await fetch(`http://localhost:4000/pedidos/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!resp.ok) throw new Error("Falha ao atualizar status");
-      await carregarPedidos();
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const carregarPedidos = async () => {
     try {
@@ -51,7 +37,7 @@ export default function Pedidos() {
       setPedidos(data.reverse());
     } catch (e: any) {
       setErro(
-        "Não foi possível buscar os pedidos. Verifique se o servidor está rodando (npm run server)."
+        "Não foi possível buscar o histórico. Verifique se o servidor está rodando (npm run server)."
       );
       console.error(e);
     } finally {
@@ -62,6 +48,8 @@ export default function Pedidos() {
   useEffect(() => {
     carregarPedidos();
   }, []);
+
+  const concluidos = pedidos.filter((p) => p.status === "concluido");
 
   const excluirPedido = async (id: string) => {
     if (!window.confirm("Certeza que quer excluir este pedido?")) return;
@@ -87,11 +75,10 @@ export default function Pedidos() {
               Dona Formiga
             </p>
             <h1 className="text-2xl md:text-3xl font-extrabold text-rose-900">
-              Pedidos recebidos
+              Histórico de pedidos
             </h1>
             <p className="text-sm text-rose-700 max-w-md">
-              Aqui aparecem os pedidos enviados pelo link do seu cardápio /
-              formulário online.
+              Aqui você encontra os pedidos que já foram entregues ou retirados.
             </p>
           </div>
           <button
@@ -99,7 +86,7 @@ export default function Pedidos() {
             onClick={carregarPedidos}
             className="px-5 py-2.5 rounded-full bg-rose-500 text-white text-sm font-semibold shadow-md hover:bg-rose-600 transition-colors"
           >
-            Atualizar pedidos
+            Atualizar histórico
           </button>
         </header>
 
@@ -110,17 +97,15 @@ export default function Pedidos() {
         )}
 
         {carregando ? (
-          <p className="text-sm text-rose-700">Carregando pedidos...</p>
-        ) : pedidos.length === 0 ? (
+          <p className="text-sm text-rose-700">Carregando histórico...</p>
+        ) : concluidos.length === 0 ? (
           <p className="text-sm text-rose-700 bg-white/70 border border-dashed border-rose-200 rounded-3xl px-6 py-8 text-center">
-            Ainda não há pedidos cadastrados. Quando os clientes enviarem pelo
-            formulário, eles aparecerão aqui.
+            Ainda não há pedidos concluídos. Ao marcar um pedido como
+            concluído, ele aparecerá aqui.
           </p>
         ) : (
           <div className="space-y-4">
-            {pedidos
-              .filter((p) => p.status !== "concluido")
-              .map((pedido) => (
+            {concluidos.map((pedido) => (
               <article
                 key={pedido.id}
                 className="bg-white/85 backdrop-blur-sm rounded-3xl border border-rose-100 shadow-md p-4 md:p-5"
@@ -143,10 +128,15 @@ export default function Pedidos() {
                       </p>
                     )}
                   </div>
-                  <p className="text-[11px] text-rose-500">
-                    Recebido em{" "}
-                    {new Date(pedido.criadoEm).toLocaleString("pt-BR")}
-                  </p>
+                  <div className="text-right text-[11px] text-rose-500">
+                    <p>
+                      Recebido em{" "}
+                      {new Date(pedido.criadoEm).toLocaleString("pt-BR")}
+                    </p>
+                    <p className="font-semibold text-rose-600">
+                      Status: concluído
+                    </p>
+                  </div>
                 </div>
 
                 {pedido.endereco && (
@@ -196,35 +186,6 @@ export default function Pedidos() {
                 )}
 
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  {pedido.telefone && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const numeroLimpo = pedido.telefone.replace(
-                          /\D/g,
-                          ""
-                        );
-                        const texto = `Olá, aqui é da Dona Formiga! Recebemos o seu pedido. Qualquer dúvida falamos por aqui.`;
-                        const url = `https://wa.me/55${numeroLimpo}?text=${encodeURIComponent(
-                          texto
-                        )}`;
-                        window.open(url, "_blank");
-                      }}
-                      className="px-3 py-1.5 rounded-full bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors inline-flex items-center gap-1.5"
-                    >
-                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-emerald-500 text-[10px] font-black">
-                        W
-                      </span>
-                      <span>WhatsApp</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => atualizarStatus(pedido.id, "concluido")}
-                    className="px-3 py-1.5 rounded-full bg-rose-100 text-rose-700 font-semibold hover:bg-rose-200 transition-colors"
-                  >
-                    Marcar como concluído
-                  </button>
                   <button
                     type="button"
                     onClick={() => excluirPedido(pedido.id)}
