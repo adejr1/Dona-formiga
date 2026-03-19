@@ -194,12 +194,16 @@ export default function Home() {
             onClick={() => {
               if (typeof window === "undefined") return;
               const origin = window.location.origin || "";
+              // Sempre envia o link "original" de produção para o cliente,
+              // mesmo se você estiver usando o sistema localmente (localhost).
               const base =
-                origin.startsWith("chrome-extension://")
-                  ? "http://localhost:5173"
+                origin.startsWith("chrome-extension://") ||
+                origin.includes("localhost") ||
+                origin.includes("127.0.0.1")
+                  ? "https://dona-formiga.vercel.app"
                   : origin;
               const linkCliente = `${base}/cliente`;
-              const texto = `Oi! Esse é o link para você fazer seu pedido na Dona Formiga: ${linkCliente}`;
+              const texto = `Olá, libere a formiga dentro de você e faça já o seu pedido: ${linkCliente}`;
               const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
               window.open(url, "_blank");
             }}
