@@ -155,22 +155,12 @@ export default function PedidoOnline() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-rose-100 via-rose-50 to-white flex items-center justify-center relative overflow-hidden">
-      <div
-        className="pointer-events-none select-none absolute inset-0 opacity-10 mix-blend-multiply bg-center bg-contain bg-no-repeat"
-        style={{
-          backgroundImage:
-            "url('/assets/c__Users_User_AppData_Roaming_Cursor_User_workspaceStorage_9b7e95b05d0020946e7c3e29a217bff1_images_WhatsApp_Image_2025-10-08_at_10.18.44-fotor-20251028104826-b5cb606d-134e-4ea8-8363-020ff666ac19.png')",
-        }}
-      />
+      {/* Removido fundo com imagem que nao existe em public/ no deploy. */}
 
       <div className="relative z-10 w-full max-w-xl mx-auto px-4 py-10">
         <div className="flex flex-col items-center mb-8">
           <div className="w-24 h-24 rounded-full bg-rose-200 shadow-inner overflow-hidden flex items-center justify-center mb-3">
-            <img
-              src="/assets/c__Users_User_AppData_Roaming_Cursor_User_workspaceStorage_9b7e95b05d0020946e7c3e29a217bff1_images_WhatsApp_Image_2025-10-08_at_10.18.44-fotor-20251028104826-b5cb606d-134e-4ea8-8363-020ff666ac19.png"
-              alt="Dona Formiga"
-              className="w-full h-full object-cover"
-            />
+            <span className="text-2xl font-extrabold text-rose-800">DF</span>
           </div>
           <p className="text-xs tracking-[0.3em] uppercase text-rose-500">
             Dona Formiga
