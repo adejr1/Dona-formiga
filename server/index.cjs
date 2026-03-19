@@ -101,12 +101,26 @@ app.post("/estoque", (req, res) => {
     categoria: req.body.categoria || "bolos",
     preco: precoTexto,
     precoValor: isNaN(precoNumero) ? 0 : precoNumero,
+    observacoes: req.body.observacoes || "",
+    sabores: req.body.sabores || "",
     quantidade: Number(req.body.quantidade || 0),
     ativo: req.body.ativo !== false,
   };
   estoque.push(novo);
   salvarEstoque(estoque);
   res.status(201).json(novo);
+});
+
+app.delete("/estoque/:id", (req, res) => {
+  const estoque = lerEstoque();
+  const { id } = req.params;
+  const idx = estoque.findIndex((p) => p.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: "Produto não encontrado" });
+  }
+  estoque.splice(idx, 1);
+  salvarEstoque(estoque);
+  res.status(204).end();
 });
 
 app.patch("/estoque/:id", (req, res) => {
@@ -133,6 +147,8 @@ app.patch("/estoque/:id", (req, res) => {
     categoria: req.body.categoria ?? atual.categoria,
     preco: precoTexto,
     precoValor: isNaN(precoNumero) ? atual.precoValor || 0 : precoNumero,
+    observacoes: req.body.observacoes ?? atual.observacoes ?? "",
+    sabores: req.body.sabores ?? atual.sabores ?? "",
     quantidade:
       req.body.quantidade !== undefined
         ? Number(req.body.quantidade)

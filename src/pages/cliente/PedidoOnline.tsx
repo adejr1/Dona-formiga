@@ -20,6 +20,19 @@ interface ItemCarrinho {
   quantidade: number;
 }
 
+interface PedidoCriado {
+  id: string;
+  criadoEm: string;
+  nomeCliente: string;
+  telefone: string;
+  observacoesGerais: string;
+  itens: ItemCarrinho[];
+  endereco?: string;
+  tipoEntrega?: "entrega" | "retirada";
+  taxaEntrega?: number;
+  valorTotal?: number;
+}
+
 export default function PedidoOnline() {
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -32,9 +45,20 @@ export default function PedidoOnline() {
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [pedidoCriado, setPedidoCriado] = useState<PedidoCriado | null>(null);
+  const [pixCopiado, setPixCopiado] = useState(false);
   const [erroCarregandoProdutos, setErroCarregandoProdutos] = useState<
     string | null
   >(null);
+
+  const CHAVE_PIX = "07078804597";
+  const WHATSAPP_DONA_FORMIGA = "5517991934616";
+
+  const formatarDataHora = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString("pt-BR");
+  };
 
   useEffect(() => {
     const carregarProdutos = async () => {
@@ -95,6 +119,7 @@ export default function PedidoOnline() {
   const handleEnviar = async (event: React.FormEvent) => {
     event.preventDefault();
     setMensagem(null);
+    setPixCopiado(false);
 
     if (!nomeCliente.trim()) {
       setMensagem("Por favor, informe seu nome.");
@@ -133,6 +158,8 @@ export default function PedidoOnline() {
         throw new Error("Falha ao enviar pedido");
       }
 
+      const criado = (await resp.json()) as PedidoCriado;
+      setPedidoCriado(criado);
       setMensagem(
         tipoEntrega === "entrega"
           ? "Pedido enviado com sucesso! Pagamento via PIX abaixo. Assim que o pagamento for confirmado pelo WhatsApp, sua entrega será programada."
@@ -151,6 +178,53 @@ export default function PedidoOnline() {
     } finally {
       setEnviando(false);
     }
+  };
+
+  const copiarPix = async () => {
+    try {
+      await navigator.clipboard.writeText(CHAVE_PIX);
+      setPixCopiado(true);
+      window.setTimeout(() => setPixCopiado(false), 2500);
+    } catch {
+      const el = document.createElement("textarea");
+      el.value = CHAVE_PIX;
+      el.style.position = "fixed";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setPixCopiado(true);
+      window.setTimeout(() => setPixCopiado(false), 2500);
+    }
+  };
+
+  const abrirWhatsappComPedido = () => {
+    if (!pedidoCriado) return;
+    const total =
+      typeof pedidoCriado.valorTotal === "number"
+        ? `R$ ${pedidoCriado.valorTotal.toFixed(2).replace(".", ",")}`
+        : "";
+    const itens = (pedidoCriado.itens || [])
+      .map((i) => `- ${i.nome} x${i.quantidade}`)
+      .join("\n");
+    const texto =
+      `Olá! Acabei de fazer o pagamento do meu pedido na Dona Formiga.\n\n` +
+      `Pedido: ${pedidoCriado.id}\n` +
+      `Cliente: ${pedidoCriado.nomeCliente}\n` +
+      (pedidoCriado.telefone ? `WhatsApp: ${pedidoCriado.telefone}\n` : "") +
+      `Data/Hora: ${formatarDataHora(pedidoCriado.criadoEm)}\n` +
+      (pedidoCriado.tipoEntrega ? `Forma: ${pedidoCriado.tipoEntrega}\n` : "") +
+      (pedidoCriado.endereco ? `Endereço: ${pedidoCriado.endereco}\n` : "") +
+      (total ? `Total: ${total}\n` : "") +
+      `\nItens:\n${itens}\n\n` +
+      `Vou enviar o comprovante aqui.`;
+
+    const url = `https://wa.me/${WHATSAPP_DONA_FORMIGA}?text=${encodeURIComponent(
+      texto
+    )}`;
+    window.open(url, "_blank");
   };
 
   return (
@@ -174,10 +248,126 @@ export default function PedidoOnline() {
           </p>
         </div>
 
-        <form
-          onSubmit={handleEnviar}
-          className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl shadow-rose-100 border border-rose-100 p-6 space-y-4"
-        >
+        {pedidoCriado ? (
+          <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl shadow-rose-100 border border-rose-100 p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                <span className="text-emerald-700 font-black">✓</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-rose-900">
+                  Pedido finalizado
+                </p>
+                {mensagem && <p className="text-xs text-rose-700">{mensagem}</p>}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-rose-100 bg-rose-50/40 p-4">
+              <p className="text-[11px] uppercase tracking-wide text-rose-500 mb-2">
+                Recibo virtual
+              </p>
+              <div className="space-y-1 text-xs text-rose-800">
+                <p>
+                  <span className="font-semibold">Pedido:</span>{" "}
+                  <span className="font-mono">{pedidoCriado.id}</span>
+                </p>
+                <p>
+                  <span className="font-semibold">Data/Hora:</span>{" "}
+                  {formatarDataHora(pedidoCriado.criadoEm)}
+                </p>
+                <p>
+                  <span className="font-semibold">Cliente:</span>{" "}
+                  {pedidoCriado.nomeCliente}
+                </p>
+                {pedidoCriado.tipoEntrega && (
+                  <p>
+                    <span className="font-semibold">Forma:</span>{" "}
+                    {pedidoCriado.tipoEntrega === "entrega"
+                      ? "Entrega"
+                      : "Retirada"}
+                  </p>
+                )}
+                {pedidoCriado.endereco && (
+                  <p>
+                    <span className="font-semibold">Endereço:</span>{" "}
+                    {pedidoCriado.endereco}
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-3">
+                <p className="text-[11px] font-semibold text-rose-700 mb-1">
+                  Itens
+                </p>
+                <ul className="text-xs text-rose-800 space-y-1">
+                  {pedidoCriado.itens.map((i, idx) => (
+                    <li key={idx} className="flex justify-between gap-2">
+                      <span className="truncate">{i.nome}</span>
+                      <span className="font-semibold">x{i.quantidade}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {typeof pedidoCriado.valorTotal === "number" && (
+                <p className="mt-3 text-sm font-extrabold text-rose-900 flex items-center justify-between">
+                  <span>Total</span>
+                  <span>
+                    R$ {pedidoCriado.valorTotal.toFixed(2).replace(".", ",")}
+                  </span>
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <p className="text-[11px] uppercase tracking-wide text-emerald-700 mb-2">
+                Pagamento via PIX
+              </p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-emerald-900 font-semibold">
+                    Chave PIX
+                  </p>
+                  <p className="text-xs text-emerald-800 font-mono truncate">
+                    {CHAVE_PIX}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={copiarPix}
+                  className="shrink-0 px-4 py-2 rounded-full bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
+                >
+                  Copiar
+                </button>
+              </div>
+              {pixCopiado && (
+                <p className="mt-2 text-xs text-emerald-700 font-semibold">
+                  Chave PIX copiada.
+                </p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={abrirWhatsappComPedido}
+              className="w-full px-6 py-3 rounded-full bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-colors"
+            >
+              Já paguei / Enviar comprovante no WhatsApp
+            </button>
+
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="w-full px-6 py-3 rounded-full bg-rose-100 text-rose-800 font-semibold hover:bg-rose-200 transition-colors"
+            >
+              Fazer outro pedido
+            </button>
+          </div>
+        ) : (
+          <form
+            onSubmit={handleEnviar}
+            className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl shadow-rose-100 border border-rose-100 p-6 space-y-4"
+          >
           <div>
             <label className="block text-xs font-semibold text-rose-700 mb-1">
               Forma
@@ -348,7 +538,7 @@ export default function PedidoOnline() {
           <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
             <p className="font-semibold mb-1">Pagamento via PIX</p>
             <p>
-              Chave: <span className="font-mono font-bold">07078804597</span>
+              Chave: <span className="font-mono font-bold">{CHAVE_PIX}</span>
             </p>
             <p className="mt-1">
               {tipoEntrega === "entrega"
@@ -370,7 +560,8 @@ export default function PedidoOnline() {
           >
             {enviando ? "Enviando pedido..." : "Enviar pedido"}
           </button>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );

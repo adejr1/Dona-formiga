@@ -209,8 +209,16 @@ export default function Home() {
             }}
             className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-300 hover:bg-emerald-600 transition-colors text-sm gap-2"
           >
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-emerald-500 text-[11px] font-black">
-              W
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white">
+              <svg
+                viewBox="0 0 32 32"
+                aria-hidden="true"
+                focusable="false"
+                className="w-3.5 h-3.5 fill-emerald-600"
+              >
+                <path d="M19.11 17.51c-.28-.14-1.62-.8-1.87-.89-.25-.09-.43-.14-.61.14-.18.28-.7.89-.86 1.07-.16.18-.32.21-.6.07-.28-.14-1.17-.43-2.23-1.38-.82-.73-1.37-1.63-1.53-1.9-.16-.28-.02-.43.12-.57.12-.12.28-.32.41-.48.14-.16.18-.28.27-.46.09-.18.05-.34-.02-.48-.07-.14-.61-1.48-.84-2.03-.22-.53-.45-.46-.61-.46-.16 0-.34-.02-.52-.02-.18 0-.46.07-.7.34-.25.28-.95.93-.95 2.26s.98 2.62 1.12 2.8c.14.18 1.93 2.95 4.68 4.13.65.28 1.16.45 1.56.58.66.21 1.26.18 1.74.11.53-.08 1.62-.66 1.85-1.3.23-.64.23-1.18.16-1.3-.07-.12-.25-.18-.52-.32z" />
+                <path d="M26.67 5.33A14.67 14.67 0 0 0 4.6 24.79L3 29l4.35-1.56A14.66 14.66 0 0 0 29 16a14.58 14.58 0 0 0-2.33-10.67zM16 27.33c-2.4 0-4.74-.65-6.79-1.87l-.49-.29-2.58.92.95-2.52-.32-.52A11.99 11.99 0 1 1 16 27.33z" />
+              </svg>
             </span>
             <span>Enviar link do pedido pelo WhatsApp</span>
           </button>
