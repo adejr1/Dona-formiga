@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../../lib/api";
 
 interface PedidoResumo {
   id: string;
@@ -21,8 +22,8 @@ export default function Home() {
     const carregar = async () => {
       try {
         const [pRes, gRes] = await Promise.all([
-          fetch("http://localhost:4000/pedidos"),
-          fetch("http://localhost:4000/gastos"),
+          fetch(apiUrl("/pedidos")),
+          fetch(apiUrl("/gastos")),
         ]);
         if (pRes.ok) {
           const data = await pRes.json();

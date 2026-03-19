@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../../lib/api";
 
 interface Gasto {
   id: string;
@@ -21,7 +22,7 @@ export default function Gastos() {
     try {
       setCarregando(true);
       setErro(null);
-      const resp = await fetch("http://localhost:4000/gastos");
+      const resp = await fetch(apiUrl("/gastos"));
       if (!resp.ok) throw new Error("Falha ao carregar gastos");
       const dataResp = (await resp.json()) as Gasto[];
       setGastos(dataResp.reverse());
@@ -45,7 +46,7 @@ export default function Gastos() {
       valor.replace("R$", "").replace(".", "").replace(",", ".")
     );
     try {
-      const resp = await fetch("http://localhost:4000/gastos", {
+      const resp = await fetch(apiUrl("/gastos"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -68,7 +69,7 @@ export default function Gastos() {
   const excluirGasto = async (id: string) => {
     if (!window.confirm("Certeza que quer excluir este gasto?")) return;
     try {
-      const resp = await fetch(`http://localhost:4000/gastos/${id}`, {
+      const resp = await fetch(apiUrl(`/gastos/${id}`), {
         method: "DELETE",
       });
       if (!resp.ok && resp.status !== 204)

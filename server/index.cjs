@@ -4,9 +4,15 @@ const fs = require("fs");
 const path = require("path");
 
 const app = express();
-const PORT = 4000;
+// Em plataformas de hospedagem (Render/Railway/etc) a porta vem via variável de ambiente.
+// Mantemos 4000 como fallback para desenvolvimento local.
+const PORT = process.env.PORT || 4000;
 
-const DATA_DIR = path.join(__dirname, "data");
+// Permite usar um volume/pasta persistente na hospedagem.
+// Se não definir DATA_DIR, usa a pasta local `server/data`.
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(__dirname, "data");
 const PEDIDOS_FILE = path.join(DATA_DIR, "pedidos.json");
 const ESTOQUE_FILE = path.join(DATA_DIR, "estoque.json");
 const GASTOS_FILE = path.join(DATA_DIR, "gastos.json");
@@ -245,6 +251,6 @@ app.patch("/pedidos/:id/status", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Servidor Dona Formiga rodando em http://localhost:${PORT}`);
+  console.log(`Servidor Dona Formiga rodando em porta ${PORT}`);
 });
 

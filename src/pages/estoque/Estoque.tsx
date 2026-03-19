@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../../lib/api";
 
 type Categoria = "bolos" | "combos" | "doces";
 
@@ -26,7 +27,7 @@ export default function Estoque() {
     try {
       setCarregando(true);
       setErro(null);
-      const resp = await fetch("http://localhost:4000/estoque");
+      const resp = await fetch(apiUrl("/estoque"));
       if (!resp.ok) throw new Error("Falha ao carregar estoque");
       const data = (await resp.json()) as ProdutoEstoque[];
       setProdutos(data);
@@ -47,7 +48,7 @@ export default function Estoque() {
   const salvarProduto = async () => {
     if (!nome.trim()) return;
     try {
-      const resp = await fetch("http://localhost:4000/estoque", {
+      const resp = await fetch(apiUrl("/estoque"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,7 +72,7 @@ export default function Estoque() {
 
   const atualizarQuantidade = async (id: string, novaQtd: number) => {
     try {
-      const resp = await fetch(`http://localhost:4000/estoque/${id}`, {
+      const resp = await fetch(apiUrl(`/estoque/${id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quantidade: novaQtd }),

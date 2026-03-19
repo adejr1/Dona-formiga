@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../../lib/api";
 
 type Categoria = "bolos" | "combos" | "doces";
 
@@ -38,7 +39,7 @@ export default function PedidoOnline() {
   useEffect(() => {
     const carregarProdutos = async () => {
       try {
-        const resp = await fetch("http://localhost:4000/estoque");
+        const resp = await fetch(apiUrl("/estoque"));
         if (!resp.ok) throw new Error("Falha ao carregar estoque");
         const data = (await resp.json()) as ProdutoEstoque[];
         setProdutos(
@@ -112,7 +113,7 @@ export default function PedidoOnline() {
 
     try {
       setEnviando(true);
-      const resp = await fetch("http://localhost:4000/pedidos", {
+      const resp = await fetch(apiUrl("/pedidos"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

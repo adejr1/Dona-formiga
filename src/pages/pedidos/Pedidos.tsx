@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../../lib/api";
 
 interface PedidoItem {
   nome: string;
@@ -29,7 +30,7 @@ export default function Pedidos() {
 
   const atualizarStatus = async (id: string, status: string) => {
     try {
-      const resp = await fetch(`http://localhost:4000/pedidos/${id}/status`, {
+      const resp = await fetch(apiUrl(`/pedidos/${id}/status`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -45,7 +46,7 @@ export default function Pedidos() {
     try {
       setCarregando(true);
       setErro(null);
-      const resp = await fetch("http://localhost:4000/pedidos");
+      const resp = await fetch(apiUrl("/pedidos"));
       if (!resp.ok) throw new Error("Falha ao carregar pedidos");
       const data = (await resp.json()) as Pedido[];
       setPedidos(data.reverse());
@@ -66,7 +67,7 @@ export default function Pedidos() {
   const excluirPedido = async (id: string) => {
     if (!window.confirm("Certeza que quer excluir este pedido?")) return;
     try {
-      const resp = await fetch(`http://localhost:4000/pedidos/${id}`, {
+      const resp = await fetch(apiUrl(`/pedidos/${id}`), {
         method: "DELETE",
       });
       if (!resp.ok && resp.status !== 204)
