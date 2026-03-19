@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node node_modules/vite/bin/vite.js build",
+    "build": "npx vite build",
     "build:nw": "vite build && copy nw-package.json dist\\package.json",
     "preview": "vite preview",
     "server": "node server/index.cjs"
