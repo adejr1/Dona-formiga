@@ -69,6 +69,40 @@ function salvarGastos(lista) {
   fs.writeFileSync(GASTOS_FILE, JSON.stringify(lista, null, 2), "utf-8");
 }
 
+function linhasSaboresTexto(texto) {
+  return String(texto || "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function usaMultiSaborTexto(texto) {
+  return linhasSaboresTexto(texto).length >= 2;
+}
+
+function somaMapEstoquePorSabor(map) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return 0;
+  return Object.values(map).reduce(
+    (acc, v) => acc + Math.max(0, Number(v) || 0),
+    0
+  );
+}
+
+/** Alinha chaves do mapa às linhas atuais de sabores (2+ linhas) */
+function normalizarEstoquePorSaborServidor(saboresTexto, mapaAnterior) {
+  const lines = linhasSaboresTexto(saboresTexto);
+  if (lines.length < 2) return {};
+  const prev =
+    mapaAnterior && typeof mapaAnterior === "object" && !Array.isArray(mapaAnterior)
+      ? mapaAnterior
+      : {};
+  const out = {};
+  for (const l of lines) {
+    out[l] = Math.max(0, Number(prev[l]) || 0);
+  }
+  return out;
+}
+
 app.use(
   cors({
     origin: "*",
@@ -88,7 +122,11 @@ app.get("/estoque", (_req, res) => {
 
 app.post("/estoque", (req, res) => {
   const estoque = lerEstoque();
-  const precoTexto = req.body.preco || "";
+  let precoTexto = String(req.body.preco || "").trim();
+  // Garantia: o campo salvo para exibição no front sempre vem com "R$"
+  if (precoTexto && !precoTexto.toLowerCase().includes("r$")) {
+    precoTexto = `R$ ${precoTexto}`;
+  }
   const precoNumero = Number(
     String(precoTexto)
       .replace("R$", "")
@@ -105,8 +143,23 @@ app.post("/estoque", (req, res) => {
     sabores: req.body.sabores || "",
     imagemUrl: req.body.imagemUrl || "",
     quantidade: Number(req.body.quantidade || 0),
+    estoquePorSabor:
+      req.body.estoquePorSabor &&
+      typeof req.body.estoquePorSabor === "object" &&
+      !Array.isArray(req.body.estoquePorSabor)
+        ? req.body.estoquePorSabor
+        : {},
     ativo: req.body.ativo !== false,
   };
+  if (usaMultiSaborTexto(novo.sabores)) {
+    novo.estoquePorSabor = normalizarEstoquePorSaborServidor(
+      novo.sabores,
+      novo.estoquePorSabor
+    );
+    novo.quantidade = somaMapEstoquePorSabor(novo.estoquePorSabor);
+  } else {
+    novo.estoquePorSabor = {};
+  }
   estoque.push(novo);
   salvarEstoque(estoque);
   res.status(201).json(novo);
@@ -132,16 +185,65 @@ app.patch("/estoque/:id", (req, res) => {
     return res.status(404).json({ error: "Produto não encontrado" });
   }
   const atual = estoque[idx];
-  const precoTexto = req.body.preco ?? atual.preco;
-  const precoNumero =
-    precoTexto === atual.preco
-      ? atual.precoValor || 0
-      : Number(
-          String(precoTexto)
-            .replace("R$", "")
-            .replace(/\./g, "")
-            .replace(",", ".")
-        );
+  let precoTexto = String(req.body.preco ?? atual.preco || "").trim();
+  // Garantia: o campo salvo para exibição no front sempre vem com "R$"
+  if (precoTexto && !precoTexto.toLowerCase().includes("r$")) {
+    precoTexto = `R$ ${precoTexto}`;
+  }
+  const precoNumero = Number(
+    String(precoTexto)
+      .replace("R$", "")
+      .replace(/\./g, "")
+      .replace(",", ".")
+  );
+  const saboresNovo =
+    req.body.sabores !== undefined ? req.body.sabores : atual.sabores;
+  let estoquePorSaborAtual =
+    atual.estoquePorSabor &&
+    typeof atual.estoquePorSabor === "object" &&
+    !Array.isArray(atual.estoquePorSabor)
+      ? { ...atual.estoquePorSabor }
+      : {};
+
+  if (req.body.estoquePorSabor !== undefined) {
+    const incoming = req.body.estoquePorSabor;
+    if (typeof incoming === "object" && incoming !== null && !Array.isArray(incoming)) {
+      const lines = linhasSaboresTexto(saboresNovo);
+      if (lines.length >= 2) {
+        const merged = {};
+        for (const l of lines) {
+          if (Object.prototype.hasOwnProperty.call(incoming, l)) {
+            merged[l] = Math.max(0, Number(incoming[l]) || 0);
+          } else {
+            merged[l] = Math.max(0, Number(estoquePorSaborAtual[l]) || 0);
+          }
+        }
+        estoquePorSaborAtual = merged;
+      }
+    }
+  } else if (req.body.sabores !== undefined) {
+    if (usaMultiSaborTexto(saboresNovo)) {
+      estoquePorSaborAtual = normalizarEstoquePorSaborServidor(
+        saboresNovo,
+        atual.estoquePorSabor
+      );
+    } else {
+      estoquePorSaborAtual = {};
+    }
+  }
+
+  let quantidadeFinal =
+    req.body.quantidade !== undefined
+      ? Number(req.body.quantidade)
+      : atual.quantidade;
+  if (usaMultiSaborTexto(saboresNovo)) {
+    estoquePorSaborAtual = normalizarEstoquePorSaborServidor(
+      saboresNovo,
+      estoquePorSaborAtual
+    );
+    quantidadeFinal = somaMapEstoquePorSabor(estoquePorSaborAtual);
+  }
+
   const atualizado = {
     ...atual,
     nome: req.body.nome ?? atual.nome,
@@ -149,14 +251,17 @@ app.patch("/estoque/:id", (req, res) => {
     preco: precoTexto,
     precoValor: isNaN(precoNumero) ? atual.precoValor || 0 : precoNumero,
     observacoes: req.body.observacoes ?? atual.observacoes ?? "",
-    sabores: req.body.sabores ?? atual.sabores ?? "",
+    sabores: saboresNovo ?? "",
     imagemUrl: req.body.imagemUrl ?? atual.imagemUrl ?? "",
-    quantidade:
-      req.body.quantidade !== undefined
-        ? Number(req.body.quantidade)
-        : atual.quantidade,
+    quantidade: quantidadeFinal,
+    estoquePorSabor: usaMultiSaborTexto(saboresNovo)
+      ? estoquePorSaborAtual
+      : {},
     ativo: req.body.ativo !== undefined ? req.body.ativo : atual.ativo,
   };
+  if (!usaMultiSaborTexto(saboresNovo)) {
+    atualizado.estoquePorSabor = {};
+  }
   estoque[idx] = atualizado;
   salvarEstoque(estoque);
   res.json(atualizado);
@@ -235,8 +340,31 @@ app.post("/pedidos", (req, res) => {
       const atual = estoque[idx];
       const preco = Number(atual.precoValor || 0);
       valorTotal += preco * qtd;
-      const novaQtd = Math.max(0, Number(atual.quantidade || 0) - qtd);
-      estoque[idx] = { ...atual, quantidade: novaQtd };
+      // Para bolos, não abatemos estoque (o cliente não usa estoque na escolha)
+      if (atual.categoria === "bolos") {
+        return;
+      }
+      const linhas = linhasSaboresTexto(atual.sabores);
+      if (linhas.length >= 2) {
+        const saborPedido = item.sabor ? String(item.sabor).trim() : "";
+        if (!saborPedido || !linhas.includes(saborPedido)) {
+          return;
+        }
+        let map = normalizarEstoquePorSaborServidor(
+          atual.sabores,
+          atual.estoquePorSabor
+        );
+        const cur = Number(map[saborPedido] || 0);
+        map[saborPedido] = Math.max(0, cur - qtd);
+        estoque[idx] = {
+          ...atual,
+          estoquePorSabor: map,
+          quantidade: somaMapEstoquePorSabor(map),
+        };
+      } else {
+        const novaQtd = Math.max(0, Number(atual.quantidade || 0) - qtd);
+        estoque[idx] = { ...atual, quantidade: novaQtd };
+      }
       alterouEstoque = true;
     });
     if (alterouEstoque) {

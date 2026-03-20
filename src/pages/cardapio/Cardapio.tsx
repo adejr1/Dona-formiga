@@ -5,6 +5,10 @@ import {
   type CategoriaCatalogo,
   labelCategoriaAdmin,
 } from "../../lib/catalog";
+import {
+  totalEstoqueProduto,
+  type EstoquePorSaborMap,
+} from "../../lib/saboresEstoque";
 
 interface Produto {
   id: string;
@@ -16,6 +20,7 @@ interface Produto {
   quantidade: number;
   ativo: boolean;
   imagemUrl?: string;
+  estoquePorSabor?: EstoquePorSaborMap;
 }
 
 const MAX_IMAGEM_CHARS = 900_000;
@@ -175,7 +180,12 @@ export default function Cardapio() {
         observacoes: p.observacoes,
         sabores: p.sabores,
         imagemUrl: p.imagemUrl,
-        quantidade: p.quantidade,
+        quantidade: totalEstoqueProduto({
+          quantidade: p.quantidade,
+          sabores: p.sabores,
+          estoquePorSabor: p.estoquePorSabor,
+        }),
+        estoquePorSabor: p.estoquePorSabor,
         ativo: p.ativo,
       }));
   }, [itens]);

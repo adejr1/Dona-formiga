@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "../../lib/api";
 import SweetCatalogView from "../../components/catalog/SweetCatalogView";
 import type { CategoriaCatalogo } from "../../lib/catalog";
+import {
+  produtoMultiSabor,
+  qtdDisponivelSabor,
+  totalEstoqueProduto,
+  type EstoquePorSaborMap,
+} from "../../lib/saboresEstoque";
 
 interface ProdutoEstoque {
   id: string;
@@ -14,6 +20,7 @@ interface ProdutoEstoque {
   observacoes?: string;
   sabores?: string;
   imagemUrl?: string;
+  estoquePorSabor?: EstoquePorSaborMap;
 }
 
 interface ItemCarrinho {
@@ -21,6 +28,10 @@ interface ItemCarrinho {
   nome: string;
   categoria: CategoriaCatalogo;
   quantidade: number;
+  /** Igual à linha cadastrada em "sabores" quando o produto tem vários sabores */
+  sabor?: string;
+  /** Somente para bolos: o cliente escolhe o peso */
+  pesoKg?: number;
 }
 
 interface PedidoCriado {
@@ -46,7 +57,9 @@ export default function PedidoOnline() {
   const [tipoEntrega, setTipoEntrega] = useState<"entrega" | "retirada">(
     "retirada"
   );
-  const [endereco, setEndereco] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [rua, setRua] = useState("");
+  const [numero, setNumero] = useState("");
   const [produtos, setProdutos] = useState<ProdutoEstoque[]>([]);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [enviando, setEnviando] = useState(false);
@@ -83,8 +96,8 @@ export default function PedidoOnline() {
     };
   }, []);
 
-  const CHAVE_PIX = "07078804597";
   const WHATSAPP_DONA_FORMIGA = "5517991934616";
+  const CHAVE_PIX = "07078804597";
 
   const formatarDataHora = (iso: string) => {
     const d = new Date(iso);
@@ -120,7 +133,12 @@ export default function PedidoOnline() {
         observacoes: p.observacoes,
         sabores: p.sabores,
         imagemUrl: p.imagemUrl,
-        quantidade: p.quantidade,
+        quantidade: totalEstoqueProduto({
+          quantidade: p.quantidade,
+          sabores: p.sabores,
+          estoquePorSabor: p.estoquePorSabor,
+        }),
+        estoquePorSabor: p.estoquePorSabor,
         ativo: p.ativo,
       })),
     [produtos]
@@ -131,14 +149,35 @@ export default function PedidoOnline() {
     [carrinho]
   );
 
-  const adicionarAoCarrinho = (produto: ProdutoEstoque) => {
-    const max = Number(produto.quantidade) || 0;
+  function maxPermitidoNoCarrinho(
+    produto: ProdutoEstoque,
+    saborLinha?: string
+  ): number {
+    if (produtoMultiSabor(produto.sabores)) {
+      const s = (saborLinha || "").trim();
+      if (!s) return 0;
+      return qtdDisponivelSabor(s, produto.estoquePorSabor);
+    }
+    return totalEstoqueProduto(produto);
+  }
+
+  const adicionarAoCarrinho = (
+    produto: ProdutoEstoque,
+    saborLinha?: string
+  ) => {
+    const multi = produtoMultiSabor(produto.sabores);
+    const sabor = multi ? (saborLinha || "").trim() : undefined;
+    if (multi && !sabor) return;
+    const max = maxPermitidoNoCarrinho(produto, sabor);
     setCarrinho((atual) => {
-      const existente = atual.find((i) => i.productId === produto.id);
+      const existente = atual.find(
+        (i) =>
+          i.productId === produto.id && (i.sabor || "") === (sabor || "")
+      );
       if (existente) {
         if (existente.quantidade >= max) return atual;
         return atual.map((i) =>
-          i.productId === produto.id
+          i.productId === produto.id && (i.sabor || "") === (sabor || "")
             ? { ...i, quantidade: i.quantidade + 1 }
             : i
         );
@@ -151,12 +190,17 @@ export default function PedidoOnline() {
           nome: produto.nome,
           categoria: produto.categoria,
           quantidade: 1,
+          ...(sabor ? { sabor } : {}),
         },
       ];
     });
   };
 
-  const adicionarPorId = (id: string) => {
+  const adicionarPorId = (
+    id: string,
+    saborLinha?: string,
+    pesoKg?: number
+  ) => {
     const produto = produtos.find((p) => p.id === id);
     if (!produto) {
       mostrarFeedbackCatalogo(
@@ -164,31 +208,109 @@ export default function PedidoOnline() {
       );
       return;
     }
-    const max = Number(produto.quantidade) || 0;
-    if (max <= 0) {
+
+    const ehBolo = produto.categoria === "bolos";
+    if (ehBolo) {
+      const multi = produtoMultiSabor(produto.sabores);
+      const sNorm = (saborLinha || "").trim();
+      const peso = Number(pesoKg);
+      if (!Number.isFinite(peso) || peso < 1.5) {
+        mostrarFeedbackCatalogo("Escolha um peso a partir de 1,5 kg.");
+        return;
+      }
+      if (multi && !sNorm) {
+        mostrarFeedbackCatalogo(
+          "Escolha o sabor do bolo tocando em + Pedido ao lado do sabor."
+        );
+        return;
+      }
+
+      setCarrinho((atual) => {
+        const existente = atual.find(
+          (i) => i.productId === id && (i.sabor || "") === (sNorm || "")
+        );
+        if (existente) {
+          return atual.map((i) =>
+            i.productId === id && (i.sabor || "") === (sNorm || "")
+              ? { ...i, quantidade: 1, pesoKg: peso }
+              : i
+          );
+        }
+        return [
+          ...atual,
+          {
+            productId: id,
+            nome: produto.nome,
+            categoria: produto.categoria,
+            quantidade: 1,
+            ...(sNorm ? { sabor: sNorm } : {}),
+            pesoKg: peso,
+          },
+        ];
+      });
+
       mostrarFeedbackCatalogo(
-        "Este item está sem estoque. Escolha outro ou fale com a confeitaria."
+        sNorm
+          ? `Adicionado: ${sNorm} · ${peso.toFixed(1)} kg`
+          : `Adicionado ao pedido · ${peso.toFixed(1)} kg`
       );
       return;
     }
-    const noCarrinho = carrinho.find((i) => i.productId === id);
+
+    const multi = produtoMultiSabor(produto.sabores);
+    if (multi && !(saborLinha || "").trim()) {
+      mostrarFeedbackCatalogo(
+        "Escolha o sabor tocando em + Pedido ao lado do sabor."
+      );
+      return;
+    }
+
+    const max = maxPermitidoNoCarrinho(produto, saborLinha);
+    if (max <= 0) {
+      mostrarFeedbackCatalogo(
+        "Este sabor está sem estoque. Escolha outro ou fale com a confeitaria."
+      );
+      return;
+    }
+
+    const sNorm = (saborLinha || "").trim();
+    const noCarrinho = carrinho.find(
+      (i) =>
+        i.productId === id &&
+        (multi ? (i.sabor || "") === sNorm : !i.sabor)
+    );
     if (noCarrinho && noCarrinho.quantidade >= max) {
       mostrarFeedbackCatalogo(
         "Você já colocou a quantidade máxima disponível deste item."
       );
       return;
     }
-    adicionarAoCarrinho(produto);
-    mostrarFeedbackCatalogo("Adicionado ao pedido!");
+
+    adicionarAoCarrinho(produto, saborLinha);
+    mostrarFeedbackCatalogo(multi ? `Adicionado: ${sNorm}` : "Adicionado ao pedido!");
   };
 
-  const alterarQuantidadeCarrinho = (productId: string, delta: number) => {
+  const alterarQuantidadeCarrinho = (
+    productId: string,
+    delta: number,
+    sabor?: string
+  ) => {
+    const sKey = sabor || "";
     setCarrinho((atual) => {
       return atual
         .map((item) => {
-          if (item.productId !== productId) return item;
+          if (item.productId !== productId || (item.sabor || "") !== sKey) {
+            return item;
+          }
+          if (item.pesoKg !== undefined) {
+            // Para bolos, o peso define o item; o +1 não faz sentido e o -1 remove.
+            if (delta < 0) return null;
+            return item;
+          }
           const produto = produtos.find((p) => p.id === productId);
-          const max = produto?.quantidade ?? item.quantidade;
+          const max = produto
+            ? maxPermitidoNoCarrinho(produto, item.sabor)
+            : item.quantidade;
           const nova = item.quantidade + delta;
           if (nova <= 0) return null;
           if (nova > max) return { ...item, quantidade: max };
@@ -201,14 +323,32 @@ export default function PedidoOnline() {
   const handleEnviar = async (event: React.FormEvent) => {
     event.preventDefault();
     setMensagem(null);
-    setPixCopiado(false);
 
     if (!nomeCliente.trim()) {
       setMensagem("Por favor, informe seu nome.");
       return;
     }
 
-    if (tipoEntrega === "entrega" && !endereco.trim()) {
+    if (tipoEntrega === "entrega") {
+      const ruaTrim = rua.trim();
+      const numeroTrim = numero.trim();
+      const bairroTrim = bairro.trim();
+      if (!ruaTrim || !numeroTrim || !bairroTrim) {
+        setMensagem("Para entrega, informe rua, número e bairro.");
+        return;
+      }
+    }
+
+    const enderecoCompleto =
+      tipoEntrega === "entrega"
+        ? `${rua.trim()}, ${numero.trim()} - ${bairro.trim()}`
+        : "";
+
+    if (tipoEntrega === "retirada") {
+      // Sem endereço para retirada
+    }
+
+    if (tipoEntrega === "entrega" && !enderecoCompleto.trim()) {
       setMensagem("Informe o endereço completo para entrega.");
       return;
     }
@@ -231,7 +371,7 @@ export default function PedidoOnline() {
           observacoesGerais,
           itens: carrinho,
           tipoEntrega,
-          endereco,
+          endereco: enderecoCompleto,
           origem: "formulario-cliente",
         }),
       });
@@ -253,13 +393,16 @@ export default function PedidoOnline() {
       setPedidoCriado(criado);
       setMensagem(
         tipoEntrega === "entrega"
-          ? "Pedido enviado com sucesso! Pagamento via PIX abaixo. Assim que o pagamento for confirmado pelo WhatsApp, sua entrega será programada."
-          : "Pedido enviado com sucesso! Pagamento via PIX abaixo. Assim que o pagamento for confirmado pelo WhatsApp, sua retirada poderá ser realizada."
+          ? "Obrigado pelo seu pedido! Já estamos preparando e pode levar alguns minutos."
+          : "Pedido enviado com sucesso! Em instantes entraremos em contato pelo WhatsApp para confirmar a retirada."
       );
       setObservacoesGerais("");
       if (tipoEntrega === "retirada") {
-        setEndereco("");
+        // Nada a limpar além do carrinho
       }
+      setBairro("");
+      setRua("");
+      setNumero("");
       setCarrinho([]);
     } catch (e) {
       console.error(e);
@@ -298,10 +441,16 @@ export default function PedidoOnline() {
         ? `R$ ${pedidoCriado.valorTotal.toFixed(2).replace(".", ",")}`
         : "";
     const itens = (pedidoCriado.itens || [])
-      .map((i) => `- ${i.nome} x${i.quantidade}`)
+      .map((i) => {
+        const rotuloBase = i.sabor ? `${i.nome} (${i.sabor})` : i.nome;
+        const pesoTxt =
+          typeof i.pesoKg === "number" ? ` (${i.pesoKg} kg)` : "";
+        const qtdTxt = typeof i.pesoKg === "number" ? "" : ` x${i.quantidade}`;
+        return `- ${rotuloBase}${pesoTxt}${qtdTxt}`;
+      })
       .join("\n");
     const texto =
-      `Olá! Acabei de fazer o pagamento do meu pedido na Donna Formiga.\n\n` +
+      `Olá! Acabei de fazer um pedido na Donna Formiga.\n\n` +
       `Pedido: ${pedidoCriado.id}\n` +
       `Cliente: ${pedidoCriado.nomeCliente}\n` +
       (pedidoCriado.telefone ? `WhatsApp: ${pedidoCriado.telefone}\n` : "") +
@@ -310,7 +459,7 @@ export default function PedidoOnline() {
       (pedidoCriado.endereco ? `Endereço: ${pedidoCriado.endereco}\n` : "") +
       (total ? `Total: ${total}\n` : "") +
       `\nItens:\n${itens}\n\n` +
-      `Vou enviar o comprovante aqui.`;
+      `Agora, por favor, anexe aqui o comprovante do pagamento nesta conversa.`;
 
     const url = `https://wa.me/${WHATSAPP_DONA_FORMIGA}?text=${encodeURIComponent(
       texto
@@ -437,8 +586,21 @@ export default function PedidoOnline() {
                 <ul className="text-xs text-[#5c3d33] space-y-1">
                   {pedidoCriado.itens.map((i, idx) => (
                     <li key={idx} className="flex justify-between gap-2">
-                      <span className="truncate">{i.nome}</span>
-                      <span className="font-semibold">x{i.quantidade}</span>
+                      <span className="truncate">
+                        {i.nome}
+                        {i.sabor ? (
+                          <span className="text-[#b08d7a]"> · {i.sabor}</span>
+                        ) : null}
+                        {typeof i.pesoKg === "number" ? (
+                          <span className="text-[#b08d7a]">
+                            {" "}
+                            · {i.pesoKg} kg
+                          </span>
+                        ) : null}
+                      </span>
+                      {typeof i.pesoKg === "number" ? null : (
+                        <span className="font-semibold">x{i.quantidade}</span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -456,14 +618,11 @@ export default function PedidoOnline() {
 
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
               <p className="text-[11px] uppercase tracking-wide text-emerald-700 mb-2">
-                Pagamento via PIX
+                PIX para copiar
               </p>
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs text-emerald-900 font-semibold">
-                    Chave PIX
-                  </p>
-                  <p className="text-xs text-emerald-800 font-mono truncate">
+                  <p className="text-xs text-emerald-900 font-semibold truncate">
                     {CHAVE_PIX}
                   </p>
                 </div>
@@ -477,7 +636,7 @@ export default function PedidoOnline() {
               </div>
               {pixCopiado && (
                 <p className="mt-2 text-xs text-emerald-700 font-semibold">
-                  Chave PIX copiada.
+                  PIX copiado.
                 </p>
               )}
             </div>
@@ -524,7 +683,9 @@ export default function PedidoOnline() {
                 <SweetCatalogView
                   produtos={produtosParaCatalogo}
                   modo="cliente"
-                  onAdicionar={adicionarPorId}
+                  onAdicionar={(id, sabor, pesoKg) =>
+                    adicionarPorId(id, sabor, pesoKg)
+                  }
                   tituloMarca="Donna Formiga"
                 />
               </>
@@ -570,13 +731,44 @@ export default function PedidoOnline() {
                 <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
                   Endereço para entrega*
                 </label>
-                <textarea
-                  value={endereco}
-                  onChange={(e) => setEndereco(e.target.value)}
-                  placeholder="Rua, número, bairro, ponto de referência..."
-                  rows={2}
-                  className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 resize-none text-sm"
-                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="md:col-span-1">
+                    <label className="block text-[11px] font-semibold text-[#8b6f63] mb-1">
+                      Rua*
+                    </label>
+                    <input
+                      type="text"
+                      value={rua}
+                      onChange={(e) => setRua(e.target.value)}
+                      placeholder="Ex: Rua das Flores"
+                      className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-1">
+                    <label className="block text-[11px] font-semibold text-[#8b6f63] mb-1">
+                      Número*
+                    </label>
+                    <input
+                      type="text"
+                      value={numero}
+                      onChange={(e) => setNumero(e.target.value)}
+                      placeholder="Ex: 123"
+                      className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-[11px] font-semibold text-[#8b6f63] mb-1">
+                      Bairro*
+                    </label>
+                    <input
+                      type="text"
+                      value={bairro}
+                      onChange={(e) => setBairro(e.target.value)}
+                      placeholder="Ex: Centro"
+                      className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 text-sm"
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -621,47 +813,91 @@ export default function PedidoOnline() {
                     >
                       Cardápio
                     </button>{" "}
-                    e toque em <strong>Adicionar ao pedido</strong>.
+                    e toque em <strong>Adicionar ao pedido</strong> ou{" "}
+                    <strong>+ Pedido</strong> ao lado de cada sabor.
                   </p>
                 </div>
               ) : (
                 <div className="bg-[#fffdf8] border border-[#e8ddd4] rounded-2xl px-3 py-2 max-h-48 overflow-y-auto text-xs space-y-2">
                   {carrinho.map((item) => {
                     const p = produtos.find((x) => x.id === item.productId);
-                    const max = p?.quantidade ?? item.quantidade;
+                    const isBoloItem = item.pesoKg !== undefined;
+                    const max = isBoloItem
+                      ? null
+                      : p
+                        ? maxPermitidoNoCarrinho(p, item.sabor)
+                        : item.quantidade;
                     return (
                       <div
-                        key={item.productId}
+                        key={`${item.productId}::${item.sabor ?? ""}`}
                         className="flex items-center justify-between gap-2 border-b border-[#efe4dc] last:border-0 pb-2 last:pb-0"
                       >
                         <div className="min-w-0">
                           <p className="font-semibold text-[#5c3d33] truncate">
                             {item.nome}
+                            {item.sabor ? (
+                              <span className="font-normal text-[#b08d7a]">
+                                {" "}
+                                · {item.sabor}
+                              </span>
+                            ) : null}
                           </p>
-                          <p className="text-[11px] text-[#b08d7a]">
-                            Qtd: {item.quantidade}
-                            {max ? ` · máx. ${max}` : ""}
-                          </p>
+                          {isBoloItem ? (
+                            <p className="text-[11px] text-[#b08d7a]">
+                              Peso: {item.pesoKg} kg
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-[#b08d7a]">
+                              Qtd: {item.quantidade}
+                              {max ? ` · máx. ${max}` : ""}
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              alterarQuantidadeCarrinho(item.productId, -1)
-                            }
-                            className="px-2 py-1 rounded-full bg-white text-[#6b4f3d] text-[11px] font-semibold border border-[#e8ddd4] hover:bg-[#f5ebe3]"
-                          >
-                            -1
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              alterarQuantidadeCarrinho(item.productId, 1)
-                            }
-                            className="px-2 py-1 rounded-full bg-white text-[#6b4f3d] text-[11px] font-semibold border border-[#e8ddd4] hover:bg-[#f5ebe3]"
-                          >
-                            +1
-                          </button>
+                          {isBoloItem ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                alterarQuantidadeCarrinho(
+                                  item.productId,
+                                  -1,
+                                  item.sabor
+                                )
+                              }
+                              className="px-3 py-1 rounded-full bg-white text-[#6b4f3d] text-[11px] font-semibold border border-[#e8ddd4] hover:bg-[#f5ebe3]"
+                            >
+                              Remover
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  alterarQuantidadeCarrinho(
+                                    item.productId,
+                                    -1,
+                                    item.sabor
+                                  )
+                                }
+                                className="px-2 py-1 rounded-full bg-white text-[#6b4f3d] text-[11px] font-semibold border border-[#e8ddd4] hover:bg-[#f5ebe3]"
+                              >
+                                -1
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  alterarQuantidadeCarrinho(
+                                    item.productId,
+                                    1,
+                                    item.sabor
+                                  )
+                                }
+                                className="px-2 py-1 rounded-full bg-white text-[#6b4f3d] text-[11px] font-semibold border border-[#e8ddd4] hover:bg-[#f5ebe3]"
+                              >
+                                +1
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -681,20 +917,6 @@ export default function PedidoOnline() {
                 rows={3}
                 className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 resize-none text-sm"
               />
-            </div>
-
-            <div className="text-[11px] text-[#8b6f63] bg-[#fffdf8] border border-[#e8ddd4] rounded-2xl px-3 py-2">
-              <p className="font-semibold mb-1 text-[#5c3d33]">
-                Pagamento via PIX
-              </p>
-              <p>
-                Chave: <span className="font-mono font-bold">{CHAVE_PIX}</span>
-              </p>
-              <p className="mt-1">
-                {tipoEntrega === "entrega"
-                  ? "Será cobrada taxa fixa de R$ 3,00 pela entrega."
-                  : "Para retirada, efetue o pagamento e aguarde a confirmação pelo WhatsApp antes de vir buscar."}
-              </p>
             </div>
 
             {mensagem && (

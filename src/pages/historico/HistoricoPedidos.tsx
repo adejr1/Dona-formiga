@@ -6,6 +6,7 @@ interface PedidoItem {
   categoria?: string;
   quantidade?: number;
   observacoes?: string;
+  sabor?: string;
 }
 
 interface Pedido {
@@ -157,6 +158,12 @@ export default function HistoricoPedidos() {
                         <li key={idx} className="flex justify-between gap-2">
                           <span>
                             {item.nome}
+                            {item.sabor && (
+                              <span className="text-rose-500">
+                                {" "}
+                                · {item.sabor}
+                              </span>
+                            )}
                             {item.categoria && ` (${item.categoria})`}
                             {item.observacoes && ` - ${item.observacoes}`}
                           </span>

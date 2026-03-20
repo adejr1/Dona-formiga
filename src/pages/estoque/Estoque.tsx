@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "../../lib/api";
-
 import type { CategoriaCatalogo } from "../../lib/catalog";
+import {
+  linhasSabores,
+  normalizarEstoquePorSabor,
+  produtoMultiSabor,
+  somaEstoquePorSabor,
+  type EstoquePorSaborMap,
+} from "../../lib/saboresEstoque";
 
 interface ProdutoEstoque {
   id: string;
@@ -11,6 +17,107 @@ interface ProdutoEstoque {
   precoValor?: number;
   quantidade: number;
   ativo: boolean;
+  sabores?: string;
+  estoquePorSabor?: EstoquePorSaborMap;
+}
+
+function BlocoEstoquePorSabor({
+  produto,
+  onSalvo,
+}: {
+  produto: ProdutoEstoque;
+  onSalvo: () => void;
+}) {
+  const [map, setMap] = useState<EstoquePorSaborMap>(() =>
+    normalizarEstoquePorSabor(produto.sabores, produto.estoquePorSabor)
+  );
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    setMap(
+      normalizarEstoquePorSabor(produto.sabores, produto.estoquePorSabor)
+    );
+  }, [produto.id, produto.sabores, produto.estoquePorSabor]);
+
+  const linhas = linhasSabores(produto.sabores);
+  if (linhas.length < 2) return null;
+
+  const ajustar = (nome: string, delta: number) => {
+    setMap((m) => ({
+      ...m,
+      [nome]: Math.max(0, (Number(m[nome]) || 0) + delta),
+    }));
+  };
+
+  const salvar = async () => {
+    try {
+      setSalvando(true);
+      const resp = await fetch(apiUrl(`/estoque/${produto.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estoquePorSabor: map }),
+      });
+      if (!resp.ok) throw new Error("Falha ao salvar");
+      await onSalvo();
+    } catch (e) {
+      console.error(e);
+      alert("Não foi possível salvar o estoque por sabor.");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-rose-200/80 pt-3">
+      <p className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide">
+        Quantidade por sabor
+      </p>
+      <p className="text-[10px] text-rose-500 leading-snug">
+        Cada linha do campo &quot;Sabores&quot; no Cardápio vira um sabor com
+        estoque separado. Total no sistema:{" "}
+        <strong>{somaEstoquePorSabor(map)}</strong>
+      </p>
+      <ul className="space-y-2">
+        {linhas.map((nome) => (
+          <li
+            key={nome}
+            className="flex flex-wrap items-center gap-2 text-[11px]"
+          >
+            <span className="flex-1 min-w-[6rem] text-rose-800 font-medium truncate">
+              {nome}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => ajustar(nome, -1)}
+                className="px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-[10px] font-semibold hover:bg-rose-200"
+              >
+                −1
+              </button>
+              <span className="w-8 text-center font-semibold text-rose-900">
+                {Number(map[nome]) || 0}
+              </span>
+              <button
+                type="button"
+                onClick={() => ajustar(nome, 1)}
+                className="px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-[10px] font-semibold hover:bg-rose-200"
+              >
+                +1
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={salvar}
+        disabled={salvando}
+        className="w-full mt-1 py-2 rounded-xl bg-rose-500 text-white text-[11px] font-semibold hover:bg-rose-600 disabled:opacity-50"
+      >
+        {salvando ? "Salvando..." : "Salvar estoque deste produto"}
+      </button>
+    </div>
+  );
 }
 
 export default function Estoque() {
@@ -79,10 +186,12 @@ export default function Estoque() {
             <h1 className="text-2xl md:text-3xl font-extrabold text-rose-900">
               Estoque de produtos
             </h1>
-            <p className="text-sm text-rose-700 max-w-md">
-              Ajuste apenas a <strong>quantidade</strong> e se o item está{" "}
-              <strong>ativo</strong>. O cadastro (nome, preço, categoria) fica
-              na aba <strong>Cardápio</strong>.
+            <p className="text-sm text-rose-700 max-w-lg">
+              Ajuste a <strong>quantidade</strong> e o status{" "}
+              <strong>ativo</strong>. Se o produto tiver{" "}
+              <strong>2 ou mais sabores</strong> (uma linha por sabor no
+              Cardápio), aparece abaixo o controle{" "}
+              <strong>por sabor</strong>.
             </p>
           </div>
           <button
@@ -149,30 +258,54 @@ export default function Estoque() {
                       {p.ativo ? "Desativar" : "Ativar"}
                     </button>
                   </div>
-                  <div className="flex items-center justify-between gap-2 mt-1">
-                    <p className="text-xs text-rose-600">
-                      Quantidade disponível:{" "}
-                      <span className="font-semibold">{p.quantidade}</span>
+
+                  {produtoMultiSabor(p.sabores) ? (
+                    <p className="text-[11px] text-rose-600">
+                      Total combinado:{" "}
+                      <span className="font-semibold">
+                        {somaEstoquePorSabor(
+                          normalizarEstoquePorSabor(
+                            p.sabores,
+                            p.estoquePorSabor
+                          )
+                        )}
+                      </span>
                     </p>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          atualizarQuantidade(p.id, Math.max(0, p.quantidade - 1))
-                        }
-                        className="px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold hover:bg-rose-200"
-                      >
-                        -1
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => atualizarQuantidade(p.id, p.quantidade + 1)}
-                        className="px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold hover:bg-rose-200"
-                      >
-                        +1
-                      </button>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <p className="text-xs text-rose-600">
+                        Quantidade disponível:{" "}
+                        <span className="font-semibold">{p.quantidade}</span>
+                      </p>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            atualizarQuantidade(
+                              p.id,
+                              Math.max(0, p.quantidade - 1)
+                            )
+                          }
+                          className="px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold hover:bg-rose-200"
+                        >
+                          -1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            atualizarQuantidade(p.id, p.quantidade + 1)
+                          }
+                          className="px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold hover:bg-rose-200"
+                        >
+                          +1
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {produtoMultiSabor(p.sabores) && (
+                    <BlocoEstoquePorSabor produto={p} onSalvo={carregar} />
+                  )}
                 </article>
               ))}
             </div>
@@ -182,4 +315,3 @@ export default function Estoque() {
     </div>
   );
 }
-
