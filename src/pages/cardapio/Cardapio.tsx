@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiUrl } from "../../lib/api";
-
-type Categoria = "bolos" | "combos" | "doces";
+import SweetCatalogView from "../../components/catalog/SweetCatalogView";
+import {
+  type CategoriaCatalogo,
+  labelCategoriaAdmin,
+} from "../../lib/catalog";
 
 interface Produto {
   id: string;
@@ -9,10 +12,13 @@ interface Produto {
   preco: string;
   observacoes?: string;
   sabores?: string;
-  categoria: Categoria;
+  categoria: CategoriaCatalogo;
   quantidade: number;
   ativo: boolean;
+  imagemUrl?: string;
 }
+
+const MAX_IMAGEM_CHARS = 900_000;
 
 export default function Cardapio() {
   const [itens, setItens] = useState<Produto[]>([]);
@@ -20,8 +26,11 @@ export default function Cardapio() {
   const [preco, setPreco] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [sabores, setSabores] = useState("");
-  const [categoria, setCategoria] = useState<Categoria>("bolos");
-  const [abaFiltro, setAbaFiltro] = useState<"todos" | Categoria>("todos");
+  const [categoria, setCategoria] = useState<CategoriaCatalogo>("bolos");
+  const [abaFiltro, setAbaFiltro] = useState<"todos" | CategoriaCatalogo>(
+    "todos"
+  );
+  const [imagemDataUrl, setImagemDataUrl] = useState<string | undefined>();
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -47,6 +56,32 @@ export default function Cardapio() {
     carregar();
   }, []);
 
+  const handleImagemChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setImagemDataUrl(undefined);
+      return;
+    }
+    if (file.size > 2.5 * 1024 * 1024) {
+      setErro("Imagem muito grande. Use até ~2,5 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      if (result.length > MAX_IMAGEM_CHARS) {
+        setErro(
+          "Imagem resulta em arquivo muito grande após conversão. Tente uma foto menor ou mais compacta."
+        );
+        setImagemDataUrl(undefined);
+        return;
+      }
+      setImagemDataUrl(result);
+      setErro(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const adicionarItem = async () => {
     if (!nome.trim()) return;
     try {
@@ -60,9 +95,9 @@ export default function Cardapio() {
           observacoes: observacoes.trim(),
           sabores: sabores.trim(),
           categoria,
-          // Produto nasce sem estoque; você controla na aba Estoque
           quantidade: 0,
           ativo: true,
+          imagemUrl: imagemDataUrl || "",
         }),
       });
       if (!resp.ok) throw new Error("Falha ao salvar item");
@@ -70,6 +105,7 @@ export default function Cardapio() {
       setPreco("");
       setObservacoes("");
       setSabores("");
+      setImagemDataUrl(undefined);
       await carregar();
     } catch (e) {
       console.error(e);
@@ -79,7 +115,18 @@ export default function Cardapio() {
 
   const atualizarProduto = async (
     id: string,
-    patch: Partial<Pick<Produto, "nome" | "preco" | "observacoes" | "sabores" | "categoria" | "ativo">>
+    patch: Partial<
+      Pick<
+        Produto,
+        | "nome"
+        | "preco"
+        | "observacoes"
+        | "sabores"
+        | "categoria"
+        | "ativo"
+        | "imagemUrl"
+      >
+    >
   ) => {
     try {
       const resp = await fetch(apiUrl(`/estoque/${id}`), {
@@ -110,66 +157,98 @@ export default function Cardapio() {
   };
 
   const visiveis = useMemo(() => {
-    const lista = abaFiltro === "todos"
-      ? itens
-      : itens.filter((item) => item.categoria === abaFiltro);
-    // Cardápio (admin) mostra tudo, inclusive inativos/zerados, para você gerenciar.
+    const lista =
+      abaFiltro === "todos"
+        ? itens
+        : itens.filter((item) => item.categoria === abaFiltro);
     return [...lista].reverse();
   }, [abaFiltro, itens]);
 
+  const previewCatalogo = useMemo(() => {
+    return itens
+      .filter((p) => p.ativo !== false)
+      .map((p) => ({
+        id: p.id,
+        nome: p.nome,
+        preco: p.preco,
+        categoria: p.categoria,
+        observacoes: p.observacoes,
+        sabores: p.sabores,
+        imagemUrl: p.imagemUrl,
+        quantidade: p.quantidade,
+        ativo: p.ativo,
+      }));
+  }, [itens]);
+
+  const abas: { id: "todos" | CategoriaCatalogo; label: string }[] = [
+    { id: "todos", label: "Tudo" },
+    { id: "bolos", label: "Bolos recheados" },
+    { id: "doces", label: "Docinhos" },
+    { id: "combos", label: "Fatias" },
+    { id: "bebidas", label: "Bebidas" },
+  ];
+
+  const categoriasCadastro: { id: CategoriaCatalogo; label: string }[] = [
+    { id: "bolos", label: "Bolos → Nossos Bolos Recheados" },
+    { id: "doces", label: "Doces → Docinhos Gourmet" },
+    { id: "combos", label: "Fatias → Fatias Supremas" },
+    { id: "bebidas", label: "Bebidas → Bebidas que Abraçam" },
+  ];
+
   return (
-    <div className="h-full min-h-screen bg-gradient-to-b from-rose-100 via-rose-50 to-white relative overflow-hidden">
-      <div className="relative z-10 max-w-6xl mx-auto px-4 py-8 md:py-12">
-        {/* Cabeçalho */}
-        <header className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
-          <div className="flex items-center gap-4">
-            <div className="w-20 h-20 rounded-full bg-rose-200 shadow-inner overflow-hidden flex items-center justify-center">
-              <span className="text-2xl font-extrabold text-rose-800">DF</span>
-            </div>
-            <div>
-              <p className="text-xs tracking-[0.3em] uppercase text-rose-500">
-                Dona Formiga
-              </p>
-              <h1 className="text-3xl md:text-4xl font-extrabold text-rose-900 drop-shadow-sm">
-                Cardápio
-              </h1>
-              <p className="text-sm text-rose-700 max-w-md">
-                Cadastre seus produtos aqui. A aba <strong>Estoque</strong> usa
-                esses mesmos produtos para controlar a quantidade.
-              </p>
-            </div>
+    <div className="h-full min-h-screen bg-gradient-to-b from-[#fef8f3] via-[#fffdf8] to-[#f5ebe3] relative overflow-hidden font-sans">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 py-8 md:py-12">
+        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
+          <div>
+            <p className="text-[10px] tracking-[0.35em] uppercase text-[#b08d7a]">
+              Painel · Cardápio
+            </p>
+            <h1 className="font-serif text-3xl md:text-4xl text-[#5c3d33] font-semibold mt-1">
+              Donna Formiga
+            </h1>
+            <p className="text-sm text-[#8b6f63] max-w-lg mt-2">
+              Cadastre produtos com foto e descrições deliciosas. O mesmo visual
+              aparece na aba <strong>Cardápio</strong> da página do cliente.
+              Quantidade continua na aba <strong>Estoque</strong>.
+            </p>
           </div>
           <button
             type="button"
             onClick={carregar}
-            className="px-5 py-2.5 rounded-full bg-rose-500 text-white text-sm font-semibold shadow-md hover:bg-rose-600 transition-colors"
+            className="px-5 py-2.5 rounded-full bg-[#8b5a47] text-white text-sm font-semibold shadow-md hover:bg-[#6b4538] transition-colors"
           >
-            Atualizar cardápio
+            Atualizar
           </button>
         </header>
 
         {erro && (
-          <div className="mb-4 text-xs text-rose-800 bg-rose-100 border border-rose-300 rounded-2xl px-4 py-3">
+          <div className="mb-4 text-xs text-[#5c3d33] bg-[#fde8e8] border border-[#f5c4c4] rounded-2xl px-4 py-3">
             {erro}
           </div>
         )}
 
-        {/* Abas de filtro: catálogo geral / categorias */}
+        {/* Pré-visualização do cardápio Sweet & Clean (igual ao cliente) */}
+        <section className="mb-12">
+          <h2 className="font-serif text-xl text-[#5c3d33] mb-4 text-center">
+            Pré-visualização (como o cliente vê)
+          </h2>
+          <SweetCatalogView
+            produtos={previewCatalogo}
+            modo="admin"
+            tituloMarca="Donna Formiga"
+          />
+        </section>
+
         <div className="mb-6 flex flex-wrap gap-2">
-          {[
-            { id: "todos" as const, label: "Catálogo completo" },
-            { id: "bolos" as const, label: "Bolos" },
-            { id: "combos" as const, label: "Combos" },
-            { id: "doces" as const, label: "Doces" },
-          ].map((aba) => (
+          {abas.map((aba) => (
             <button
               key={aba.id}
               type="button"
               onClick={() => setAbaFiltro(aba.id)}
               className={`px-4 py-2 rounded-full text-xs font-semibold border transition-all ${
                 abaFiltro === aba.id
-                  ? "bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-300"
-                  : "bg-white/80 text-rose-700 border-rose-200 hover:bg-rose-50"
+                  ? "bg-[#8b5a47] text-white border-[#8b5a47] shadow-md"
+                  : "bg-white/90 text-[#6b4f3d] border-[#e8ddd4] hover:bg-[#fffdf8]"
               }`}
             >
               {aba.label}
@@ -177,28 +256,26 @@ export default function Cardapio() {
           ))}
         </div>
 
-        {/* Formulário de cadastro */}
-        <section className="mb-10 bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl shadow-rose-100 border border-rose-100 p-6 md:p-8">
-          <h2 className="text-lg md:text-xl font-semibold text-rose-900 mb-4">
+        <section className="mb-10 bg-white/90 backdrop-blur-sm rounded-[2rem] shadow-lg border border-[#e8ddd4] p-6 md:p-8">
+          <h2 className="font-serif text-lg md:text-xl text-[#5c3d33] mb-4">
             Novo item do cardápio
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-rose-700 mb-1">
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
                 Nome do produto
               </label>
               <input
                 type="text"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
-                placeholder="Ex: Bolo de brigadeiro"
-                className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white/80 text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400"
+                placeholder="Ex: Bolo de brigadeiro belga"
+                className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50"
               />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-rose-700 mb-1">
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
                 Preço
               </label>
               <input
@@ -206,76 +283,85 @@ export default function Cardapio() {
                 value={preco}
                 onChange={(e) => setPreco(e.target.value)}
                 placeholder="Ex: R$ 59,90"
-                className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white/80 text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400"
+                className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-start">
             <div>
-              <label className="block text-xs font-semibold text-rose-700 mb-1">
-                Observações do produto
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                Descrição que dá água na boca
               </label>
               <textarea
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
-                placeholder="Ex: opção sem lactose, informar sabor do recheio, tamanho da forma..."
+                placeholder="Ex: massa fofinha, recheio cremoso de chocolate belga e finalização com raspas douradas..."
                 rows={3}
-                className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white/80 text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400 resize-none"
+                className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 resize-none"
               />
               <div className="mt-4">
-                <label className="block text-xs font-semibold text-rose-700 mb-1">
-                  Sabores (um por linha)
+                <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                  Sabores / variações (um por linha)
                 </label>
                 <textarea
                   value={sabores}
                   onChange={(e) => setSabores(e.target.value)}
-                  placeholder={"Ex:\nBrigadeiro\nNinho com morango\nDoce de leite"}
+                  placeholder={"Ex:\nBrigadeiro\nNinho com morango"}
                   rows={4}
-                  className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white/80 text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400 resize-none"
+                  className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 resize-none"
                 />
               </div>
 
               <div className="mt-4">
-                <label className="block text-xs font-semibold text-rose-700 mb-1">
-                  Categoria
+                <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                  Seção do cardápio
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: "bolos" as Categoria, label: "Bolo" },
-                    { id: "combos" as Categoria, label: "Combos" },
-                    { id: "doces" as Categoria, label: "Doces" },
-                  ].map((opcao) => (
+                  {categoriasCadastro.map((opcao) => (
                     <button
                       key={opcao.id}
                       type="button"
                       onClick={() => setCategoria(opcao.id)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all ${
                         categoria === opcao.id
-                          ? "bg-rose-500 text-white border-rose-500"
-                          : "bg-white/80 text-rose-700 border-rose-200 hover:bg-rose-50"
+                          ? "bg-[#c9a227]/25 text-[#5c3d33] border-[#c9a227]"
+                          : "bg-white text-[#8b6f63] border-[#e8ddd4] hover:bg-[#fffdf8]"
                       }`}
                     >
                       {opcao.label}
                     </button>
                   ))}
                 </div>
-                <p className="mt-1 text-[10px] text-rose-500">
-                  Essa categoria define em qual aba (Bolo, Combos ou Doces) o
-                  item aparecerá.
-                </p>
               </div>
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs text-rose-700">
-                Dica: para colocar foto no futuro, a gente pode cadastrar uma
-                URL de imagem. Por enquanto, o cardápio é textual (mais estável).
-              </p>
-              <p className="text-[11px] text-rose-600">
-                Depois de cadastrar, vá em <strong>Estoque</strong> para colocar
-                a quantidade.
-              </p>
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                Foto do produto (circular no cardápio)
+              </label>
+              <label className="group cursor-pointer flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#e8ddd4] hover:border-[#c9a227]/60 rounded-2xl px-4 py-6 bg-[#fffdf8] transition-colors">
+                <span className="text-xs text-[#8b6f63] font-medium">
+                  Clique para escolher JPG ou PNG
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImagemChange}
+                />
+              </label>
+              {imagemDataUrl && (
+                <div className="flex justify-center">
+                  <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-[#f5ebe3] ring-2 ring-[#e8ddd4]">
+                    <img
+                      src={imagemDataUrl}
+                      alt="Prévia"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -283,123 +369,110 @@ export default function Cardapio() {
             <button
               type="button"
               onClick={adicionarItem}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-rose-500 to-rose-400 text-white font-semibold shadow-lg shadow-rose-300 hover:shadow-rose-400/60 hover:brightness-105 transition-all"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-[#8b5a47] to-[#a06b55] text-white font-semibold shadow-lg hover:brightness-105 transition-all"
             >
               Adicionar ao cardápio
             </button>
           </div>
         </section>
 
-        {/* Lista de itens */}
         <section>
-          <h2 className="text-lg md:text-xl font-semibold text-rose-900 mb-4">
-            {abaFiltro === "todos" && "Catálogo completo"}
-            {abaFiltro === "bolos" && "Bolos do cardápio"}
-            {abaFiltro === "combos" && "Combos do cardápio"}
-            {abaFiltro === "doces" && "Doces do cardápio"}
+          <h2 className="font-serif text-lg md:text-xl text-[#5c3d33] mb-4">
+            Itens cadastrados
           </h2>
 
           {carregando ? (
-            <p className="text-sm text-rose-700">Carregando cardápio...</p>
+            <p className="text-sm text-[#8b6f63]">Carregando...</p>
           ) : itens.length === 0 ? (
-            <p className="text-sm text-rose-600 bg-white/70 border border-dashed border-rose-200 rounded-3xl px-6 py-8 text-center">
-              Nenhum item cadastrado ainda. Comece adicionando o primeiro doce
-              acima.
+            <p className="text-sm text-[#8b6f63] bg-white/70 border border-dashed border-[#e8ddd4] rounded-3xl px-6 py-8 text-center">
+              Nenhum item ainda. Cadastre o primeiro acima.
+            </p>
+          ) : visiveis.length === 0 ? (
+            <p className="text-sm text-[#8b6f63] bg-white/70 border border-dashed border-[#e8ddd4] rounded-3xl px-6 py-8 text-center">
+              Nenhum item nesta seção.
             </p>
           ) : (
-            visiveis.length === 0 ? (
-              <p className="text-sm text-rose-600 bg-white/70 border border-dashed border-rose-200 rounded-3xl px-6 py-8 text-center">
-                Ainda não há itens nessa categoria. Cadastre um novo item e
-                escolha a categoria correspondente.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {visiveis.map((item) => (
-                  <article
-                    key={item.id}
-                    className="relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl shadow-rose-100 border border-rose-100 overflow-hidden flex flex-col"
-                  >
-                    <div className="p-4 flex-1 flex flex-col">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-base md:text-lg font-semibold text-rose-900">
-                          {item.nome}
-                        </h3>
-                        <span className="text-[10px] px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-semibold uppercase tracking-wide">
-                          {item.categoria === "bolos" && "Bolo"}
-                          {item.categoria === "combos" && "Combo"}
-                          {item.categoria === "doces" && "Doce"}
-                        </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {visiveis.map((item) => (
+                <article
+                  key={item.id}
+                  className="bg-white/90 rounded-3xl border border-[#e8ddd4] shadow-sm overflow-hidden flex gap-3 p-4"
+                >
+                  <div className="shrink-0 w-20 h-20 rounded-full overflow-hidden border-4 border-[#f5ebe3] bg-[#fef8f3]">
+                    {item.imagemUrl ? (
+                      <img
+                        src={item.imagemUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[10px] text-[#d4c4bc] text-center px-1">
+                        sem foto
                       </div>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                        <span
-                          className={`px-2 py-1 rounded-full font-semibold ${
-                            item.ativo
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {item.ativo ? "Ativo" : "Inativo"}
-                        </span>
-                        <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-700 font-semibold">
-                          Estoque: {item.quantidade || 0}
-                        </span>
-                      </div>
-
-                      {item.preco && (
-                        <p className="text-sm font-bold text-rose-700 mt-2">
-                          {item.preco}
-                        </p>
-                      )}
-                      {item.sabores && (
-                        <div className="mt-3">
-                          <p className="text-[11px] font-semibold text-rose-700 mb-1">
-                            Sabores:
-                          </p>
-                          <ul className="text-xs text-rose-600 space-y-0.5">
-                            {String(item.sabores)
-                              .split("\n")
-                              .map((s) => s.trim())
-                              .filter(Boolean)
-                              .map((sabor, index) => (
-                                <li key={index}>• {sabor}</li>
-                              ))}
-                          </ul>
-                        </div>
-                      )}
-                      {item.observacoes && (
-                        <p className="text-xs text-rose-600 mt-3 whitespace-pre-line">
-                          {item.observacoes}
-                        </p>
-                      )}
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            atualizarProduto(item.id, { ativo: !item.ativo })
-                          }
-                          className="px-3 py-1.5 rounded-full bg-rose-100 text-rose-700 font-semibold hover:bg-rose-200 transition-colors text-xs"
-                        >
-                          {item.ativo ? "Desativar" : "Ativar"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => excluirProduto(item.id)}
-                          className="px-3 py-1.5 rounded-full bg-red-50 text-red-700 font-semibold hover:bg-red-100 transition-colors text-xs"
-                        >
-                          Excluir
-                        </button>
-                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-serif text-base font-semibold text-[#5c3d33]">
+                      {item.nome}
+                    </h3>
+                    <p className="text-[10px] text-[#b08d7a] mt-0.5">
+                      {labelCategoriaAdmin(item.categoria)}
+                    </p>
+                    <p className="font-sans text-sm font-medium text-[#8b5a47] mt-1">
+                      {item.preco}
+                    </p>
+                    <p className="text-[10px] text-[#8b6f63] mt-1">
+                      Estoque: {item.quantidade ?? 0} ·{" "}
+                      {item.ativo ? "Ativo" : "Inativo"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <label className="text-[10px] text-[#c9a227] cursor-pointer underline">
+                        Trocar foto
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            const r = new FileReader();
+                            r.onload = () => {
+                              const s = String(r.result || "");
+                              if (s.length > MAX_IMAGEM_CHARS) {
+                                setErro("Foto muito grande para salvar.");
+                                return;
+                              }
+                              atualizarProduto(item.id, { imagemUrl: s });
+                            };
+                            r.readAsDataURL(f);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          atualizarProduto(item.id, { ativo: !item.ativo })
+                        }
+                        className="text-[10px] font-semibold text-[#8b5a47]"
+                      >
+                        {item.ativo ? "Desativar" : "Ativar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => excluirProduto(item.id)}
+                        className="text-[10px] font-semibold text-red-600"
+                      >
+                        Excluir
+                      </button>
                     </div>
-                  </article>
-                ))}
-              </div>
-            )
+                  </div>
+                </article>
+              ))}
+            </div>
           )}
         </section>
       </div>
     </div>
   );
 }
-

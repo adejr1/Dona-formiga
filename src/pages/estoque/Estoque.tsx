@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "../../lib/api";
 
-type Categoria = "bolos" | "combos" | "doces";
+import type { CategoriaCatalogo } from "../../lib/catalog";
 
 interface ProdutoEstoque {
   id: string;
   nome: string;
-  categoria: Categoria;
+  categoria: CategoriaCatalogo;
   preco: string;
   precoValor?: number;
   quantidade: number;
@@ -74,7 +74,7 @@ export default function Estoque() {
         <header className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
           <div>
             <p className="text-xs tracking-[0.3em] uppercase text-rose-500">
-              Dona Formiga
+              Donna Formiga
             </p>
             <h1 className="text-2xl md:text-3xl font-extrabold text-rose-900">
               Estoque de produtos
@@ -125,8 +125,9 @@ export default function Estoque() {
                       </h3>
                       <p className="text-[11px] text-rose-500">
                         {p.categoria === "bolos" && "Bolo"}
-                        {p.categoria === "combos" && "Combo"}
+                        {p.categoria === "combos" && "Fatia / combo"}
                         {p.categoria === "doces" && "Doce"}
+                        {p.categoria === "bebidas" && "Bebida"}
                       </p>
                     </div>
                     <span className="text-sm font-bold text-rose-700">

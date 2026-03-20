@@ -1,1 +1,8 @@
-http://localhost:5173/cliente
+link adm:
+https://dona-formiga.vercel.app/painel
+
+link do cliente
+https://dona-formiga.vercel.app
+
+senha do adm
+192837465

@@ -103,6 +103,7 @@ app.post("/estoque", (req, res) => {
     precoValor: isNaN(precoNumero) ? 0 : precoNumero,
     observacoes: req.body.observacoes || "",
     sabores: req.body.sabores || "",
+    imagemUrl: req.body.imagemUrl || "",
     quantidade: Number(req.body.quantidade || 0),
     ativo: req.body.ativo !== false,
   };
@@ -149,6 +150,7 @@ app.patch("/estoque/:id", (req, res) => {
     precoValor: isNaN(precoNumero) ? atual.precoValor || 0 : precoNumero,
     observacoes: req.body.observacoes ?? atual.observacoes ?? "",
     sabores: req.body.sabores ?? atual.sabores ?? "",
+    imagemUrl: req.body.imagemUrl ?? atual.imagemUrl ?? "",
     quantidade:
       req.body.quantidade !== undefined
         ? Number(req.body.quantidade)

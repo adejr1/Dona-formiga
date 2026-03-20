@@ -1,22 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiUrl } from "../../lib/api";
-
-type Categoria = "bolos" | "combos" | "doces";
+import SweetCatalogView from "../../components/catalog/SweetCatalogView";
+import type { CategoriaCatalogo } from "../../lib/catalog";
 
 interface ProdutoEstoque {
   id: string;
   nome: string;
-  categoria: Categoria;
+  categoria: CategoriaCatalogo;
   preco: string;
   precoValor?: number;
   quantidade: number;
   ativo: boolean;
+  observacoes?: string;
+  sabores?: string;
+  imagemUrl?: string;
 }
 
 interface ItemCarrinho {
   productId: string;
   nome: string;
-  categoria: Categoria;
+  categoria: CategoriaCatalogo;
   quantidade: number;
 }
 
@@ -33,7 +36,10 @@ interface PedidoCriado {
   valorTotal?: number;
 }
 
+type AbaCliente = "cardapio" | "pedido";
+
 export default function PedidoOnline() {
+  const [aba, setAba] = useState<AbaCliente>("cardapio");
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefone, setTelefone] = useState("");
   const [observacoesGerais, setObservacoesGerais] = useState("");
@@ -79,6 +85,27 @@ export default function PedidoOnline() {
     carregarProdutos();
   }, []);
 
+  const produtosParaCatalogo = useMemo(
+    () =>
+      produtos.map((p) => ({
+        id: p.id,
+        nome: p.nome,
+        preco: p.preco,
+        categoria: p.categoria,
+        observacoes: p.observacoes,
+        sabores: p.sabores,
+        imagemUrl: p.imagemUrl,
+        quantidade: p.quantidade,
+        ativo: p.ativo,
+      })),
+    [produtos]
+  );
+
+  const itensNoCarrinho = useMemo(
+    () => carrinho.reduce((acc, i) => acc + i.quantidade, 0),
+    [carrinho]
+  );
+
   const adicionarAoCarrinho = (produto: ProdutoEstoque) => {
     setCarrinho((atual) => {
       const existente = atual.find((i) => i.productId === produto.id);
@@ -103,13 +130,21 @@ export default function PedidoOnline() {
     });
   };
 
+  const adicionarPorId = (id: string) => {
+    const produto = produtos.find((p) => p.id === id);
+    if (produto) adicionarAoCarrinho(produto);
+  };
+
   const alterarQuantidadeCarrinho = (productId: string, delta: number) => {
     setCarrinho((atual) => {
       return atual
         .map((item) => {
           if (item.productId !== productId) return item;
+          const produto = produtos.find((p) => p.id === productId);
+          const max = produto?.quantidade ?? item.quantidade;
           const nova = item.quantidade + delta;
           if (nova <= 0) return null;
+          if (nova > max) return { ...item, quantidade: max };
           return { ...item, quantidade: nova };
         })
         .filter((x): x is ItemCarrinho => x !== null);
@@ -132,7 +167,7 @@ export default function PedidoOnline() {
     }
 
     if (carrinho.length === 0) {
-      setMensagem("Adicione pelo menos 1 produto ao carrinho.");
+      setMensagem("Adicione pelo menos 1 produto ao carrinho (aba Cardápio).");
       return;
     }
 
@@ -210,7 +245,7 @@ export default function PedidoOnline() {
       .map((i) => `- ${i.nome} x${i.quantidade}`)
       .join("\n");
     const texto =
-      `Olá! Acabei de fazer o pagamento do meu pedido na Dona Formiga.\n\n` +
+      `Olá! Acabei de fazer o pagamento do meu pedido na Donna Formiga.\n\n` +
       `Pedido: ${pedidoCriado.id}\n` +
       `Cliente: ${pedidoCriado.nomeCliente}\n` +
       (pedidoCriado.telefone ? `WhatsApp: ${pedidoCriado.telefone}\n` : "") +
@@ -228,45 +263,80 @@ export default function PedidoOnline() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-rose-100 via-rose-50 to-white flex items-center justify-center relative overflow-hidden">
-      {/* Removido fundo com imagem que nao existe em public/ no deploy. */}
-
-      <div className="relative z-10 w-full max-w-xl mx-auto px-4 py-10">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-24 h-24 rounded-full bg-rose-200 shadow-inner overflow-hidden flex items-center justify-center mb-3">
-            <span className="text-2xl font-extrabold text-rose-800">DF</span>
+    <div className="min-h-screen bg-gradient-to-b from-[#fef8f3] via-[#fffdf8] to-[#f5ebe3] flex items-center justify-center relative overflow-hidden font-sans">
+      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 py-10">
+        <div className="flex flex-col items-center mb-6">
+          <div className="w-20 h-20 rounded-full bg-[#f5ebe3] border-4 border-[#e8ddd4] shadow-inner overflow-hidden flex items-center justify-center mb-3">
+            <span className="font-serif text-2xl font-semibold text-[#8b5a47]">
+              DF
+            </span>
           </div>
-          <p className="text-xs tracking-[0.3em] uppercase text-rose-500">
-            Dona Formiga
+          <p className="text-[10px] tracking-[0.35em] uppercase text-[#b08d7a]">
+            Donna Formiga
           </p>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-rose-900 mt-1">
+          <h1 className="font-serif text-2xl md:text-3xl font-semibold text-[#5c3d33] mt-1">
             Faça seu pedido
           </h1>
-          <p className="text-xs md:text-sm text-rose-700 mt-2 text-center max-w-sm">
-            Preencha seus dados e os itens que deseja. Vamos receber tudo aqui
-            e te responder pelo WhatsApp.
+          <p className="text-xs md:text-sm text-[#8b6f63] mt-2 text-center max-w-md leading-relaxed">
+            Explore o cardápio com a mesma cara linda do painel e monte seu
+            carrinho com um clique. Depois, finalize na aba{" "}
+            <strong>Meu pedido</strong>.
           </p>
         </div>
 
+        {!pedidoCriado && (
+          <div className="flex gap-2 justify-center mb-6">
+            <button
+              type="button"
+              onClick={() => setAba("cardapio")}
+              className={`relative px-5 py-2.5 rounded-full text-xs font-semibold border transition-all ${
+                aba === "cardapio"
+                  ? "bg-[#8b5a47] text-white border-[#8b5a47] shadow-md"
+                  : "bg-white/90 text-[#6b4f3d] border-[#e8ddd4] hover:bg-[#fffdf8]"
+              }`}
+            >
+              Cardápio
+              {itensNoCarrinho > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-[#c9a227] text-[#5c3d33] text-[10px] font-bold flex items-center justify-center">
+                  {itensNoCarrinho}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAba("pedido")}
+              className={`px-5 py-2.5 rounded-full text-xs font-semibold border transition-all ${
+                aba === "pedido"
+                  ? "bg-[#8b5a47] text-white border-[#8b5a47] shadow-md"
+                  : "bg-white/90 text-[#6b4f3d] border-[#e8ddd4] hover:bg-[#fffdf8]"
+              }`}
+            >
+              Meu pedido
+            </button>
+          </div>
+        )}
+
         {pedidoCriado ? (
-          <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl shadow-rose-100 border border-rose-100 p-6 space-y-4">
+          <div className="bg-white/90 backdrop-blur-sm rounded-[2rem] shadow-xl border border-[#e8ddd4] p-6 space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
                 <span className="text-emerald-700 font-black">✓</span>
               </div>
               <div>
-                <p className="text-sm font-bold text-rose-900">
+                <p className="text-sm font-bold text-[#5c3d33]">
                   Pedido finalizado
                 </p>
-                {mensagem && <p className="text-xs text-rose-700">{mensagem}</p>}
+                {mensagem && (
+                  <p className="text-xs text-[#8b6f63]">{mensagem}</p>
+                )}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-rose-100 bg-rose-50/40 p-4">
-              <p className="text-[11px] uppercase tracking-wide text-rose-500 mb-2">
+            <div className="rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] p-4">
+              <p className="text-[11px] uppercase tracking-wide text-[#b08d7a] mb-2">
                 Recibo virtual
               </p>
-              <div className="space-y-1 text-xs text-rose-800">
+              <div className="space-y-1 text-xs text-[#5c3d33]">
                 <p>
                   <span className="font-semibold">Pedido:</span>{" "}
                   <span className="font-mono">{pedidoCriado.id}</span>
@@ -296,10 +366,10 @@ export default function PedidoOnline() {
               </div>
 
               <div className="mt-3">
-                <p className="text-[11px] font-semibold text-rose-700 mb-1">
+                <p className="text-[11px] font-semibold text-[#8b6f63] mb-1">
                   Itens
                 </p>
-                <ul className="text-xs text-rose-800 space-y-1">
+                <ul className="text-xs text-[#5c3d33] space-y-1">
                   {pedidoCriado.itens.map((i, idx) => (
                     <li key={idx} className="flex justify-between gap-2">
                       <span className="truncate">{i.nome}</span>
@@ -310,7 +380,7 @@ export default function PedidoOnline() {
               </div>
 
               {typeof pedidoCriado.valorTotal === "number" && (
-                <p className="mt-3 text-sm font-extrabold text-rose-900 flex items-center justify-between">
+                <p className="mt-3 text-sm font-extrabold text-[#5c3d33] flex items-center justify-between font-sans">
                   <span>Total</span>
                   <span>
                     R$ {pedidoCriado.valorTotal.toFixed(2).replace(".", ",")}
@@ -358,212 +428,214 @@ export default function PedidoOnline() {
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="w-full px-6 py-3 rounded-full bg-rose-100 text-rose-800 font-semibold hover:bg-rose-200 transition-colors"
+              className="w-full px-6 py-3 rounded-full bg-[#f5ebe3] text-[#5c3d33] font-semibold hover:bg-[#e8ddd4] transition-colors"
             >
               Fazer outro pedido
             </button>
           </div>
-        ) : (
-          <form
-            onSubmit={handleEnviar}
-            className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl shadow-rose-100 border border-rose-100 p-6 space-y-4"
-          >
-          <div>
-            <label className="block text-xs font-semibold text-rose-700 mb-1">
-              Forma
-            </label>
-            <div className="flex gap-3 text-xs">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  className="accent-rose-500"
-                  checked={tipoEntrega === "retirada"}
-                  onChange={() => setTipoEntrega("retirada")}
-                />
-                Retirada no local
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  className="accent-rose-500"
-                  checked={tipoEntrega === "entrega"}
-                  onChange={() => setTipoEntrega("entrega")}
-                />
-                Entrega (+ R$ 3,00)
-              </label>
-            </div>
-          </div>
-
-          {tipoEntrega === "entrega" && (
-            <div>
-              <label className="block text-xs font-semibold text-rose-700 mb-1">
-                Endereço para entrega*
-              </label>
-              <textarea
-                value={endereco}
-                onChange={(e) => setEndereco(e.target.value)}
-                placeholder="Rua, número, bairro, ponto de referência..."
-                rows={2}
-                className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400 resize-none text-sm"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-semibold text-rose-700 mb-1">
-              Seu nome*
-            </label>
-            <input
-              type="text"
-              value={nomeCliente}
-              onChange={(e) => setNomeCliente(e.target.value)}
-              placeholder="Ex: Maria"
-              className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-rose-700 mb-1">
-              WhatsApp
-            </label>
-            <input
-              type="tel"
-              value={telefone}
-              onChange={(e) => setTelefone(e.target.value)}
-              placeholder="(17) 9 XXXX-XXXX"
-              className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-rose-700 mb-1">
-              Selecione os produtos*
-            </label>
+        ) : aba === "cardapio" ? (
+          <div className="space-y-4">
             {erroCarregandoProdutos ? (
-              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
+              <p className="text-xs text-[#8b6f63] bg-[#fde8e8] border border-[#f5c4c4] rounded-2xl px-4 py-3 text-center">
                 {erroCarregandoProdutos}
               </p>
             ) : produtos.length === 0 ? (
-              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
-                No momento não há produtos disponíveis no cardápio.
+              <p className="text-xs text-[#8b6f63] bg-white/80 border border-[#e8ddd4] rounded-2xl px-4 py-6 text-center">
+                No momento não há produtos disponíveis no cardápio. Volte em
+                breve!
               </p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
-                {produtos.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => adicionarAoCarrinho(p)}
-                    className="text-left bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-2xl px-3 py-2 text-xs transition-colors"
-                  >
-                    <p className="font-semibold text-rose-900">{p.nome}</p>
-                    <p className="text-[11px] text-rose-500">
-                      {p.categoria === "bolos" && "Bolo"}
-                      {p.categoria === "combos" && "Combo"}
-                      {p.categoria === "doces" && "Doce"}
-                    </p>
-                    <p className="text-[11px] text-rose-700">{p.preco}</p>
-                    <p className="text-[10px] text-rose-500">
-                      Disponível: {p.quantidade}
-                    </p>
-                  </button>
-                ))}
-              </div>
+              <SweetCatalogView
+                produtos={produtosParaCatalogo}
+                modo="cliente"
+                onAdicionar={adicionarPorId}
+                tituloMarca="Donna Formiga"
+              />
             )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-rose-700 mb-1">
-              Carrinho
-            </label>
-            {carrinho.length === 0 ? (
-              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
-                Nenhum produto no carrinho ainda. Clique nos produtos acima para
-                adicionar.
-              </p>
-            ) : (
-              <div className="bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2 max-h-40 overflow-y-auto text-xs space-y-1">
-                {carrinho.map((item) => (
-                  <div
-                    key={item.productId}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <div>
-                      <p className="font-semibold text-rose-900">
-                        {item.nome}
-                      </p>
-                      <p className="text-[11px] text-rose-500">
-                        Quantidade: {item.quantidade}
-                      </p>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          alterarQuantidadeCarrinho(item.productId, -1)
-                        }
-                        className="px-2 py-1 rounded-full bg-white text-rose-700 text-[11px] font-semibold border border-rose-200 hover:bg-rose-100"
-                      >
-                        -1
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          alterarQuantidadeCarrinho(item.productId, 1)
-                        }
-                        className="px-2 py-1 rounded-full bg-white text-rose-700 text-[11px] font-semibold border border-rose-200 hover:bg-rose-100"
-                      >
-                        +1
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-rose-700 mb-1">
-              Observações gerais
-            </label>
-            <textarea
-              value={observacoesGerais}
-              onChange={(e) => setObservacoesGerais(e.target.value)}
-              placeholder="Ex: data da festa, horário de retirada, restrições (sem glúten, sem lactose)..."
-              rows={3}
-              className="w-full px-4 py-3 rounded-2xl border border-rose-200 bg-white text-rose-900 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400 resize-none text-sm"
-            />
-          </div>
-
-          <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
-            <p className="font-semibold mb-1">Pagamento via PIX</p>
-            <p>
-              Chave: <span className="font-mono font-bold">{CHAVE_PIX}</span>
-            </p>
-            <p className="mt-1">
-              {tipoEntrega === "entrega"
-                ? "Será cobrada taxa fixa de R$ 3,00 pela entrega."
-                : "Para retirada, efetue o pagamento e aguarde a confirmação pelo WhatsApp antes de vir buscar."}
+            <p className="text-center text-[11px] text-[#b08d7a]">
+              Depois de escolher, abra a aba <strong>Meu pedido</strong> para
+              preencher seus dados e enviar.
             </p>
           </div>
-
-          {mensagem && (
-            <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl px-3 py-2">
-              {mensagem}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={enviando}
-            className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-rose-500 to-rose-400 text-white font-semibold shadow-lg shadow-rose-300 hover:shadow-rose-400/60 hover:brightness-105 transition-all disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+        ) : (
+          <form
+            onSubmit={handleEnviar}
+            className="bg-white/90 backdrop-blur-sm rounded-[2rem] shadow-xl border border-[#e8ddd4] p-6 space-y-4"
           >
-            {enviando ? "Enviando pedido..." : "Enviar pedido"}
-          </button>
+            <div>
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                Forma
+              </label>
+              <div className="flex gap-3 text-xs">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    className="accent-[#8b5a47]"
+                    checked={tipoEntrega === "retirada"}
+                    onChange={() => setTipoEntrega("retirada")}
+                  />
+                  Retirada no local
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    className="accent-[#8b5a47]"
+                    checked={tipoEntrega === "entrega"}
+                    onChange={() => setTipoEntrega("entrega")}
+                  />
+                  Entrega (+ R$ 3,00)
+                </label>
+              </div>
+            </div>
+
+            {tipoEntrega === "entrega" && (
+              <div>
+                <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                  Endereço para entrega*
+                </label>
+                <textarea
+                  value={endereco}
+                  onChange={(e) => setEndereco(e.target.value)}
+                  placeholder="Rua, número, bairro, ponto de referência..."
+                  rows={2}
+                  className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 resize-none text-sm"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                Seu nome*
+              </label>
+              <input
+                type="text"
+                value={nomeCliente}
+                onChange={(e) => setNomeCliente(e.target.value)}
+                placeholder="Ex: Maria"
+                className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                WhatsApp
+              </label>
+              <input
+                type="tel"
+                value={telefone}
+                onChange={(e) => setTelefone(e.target.value)}
+                placeholder="(17) 9 XXXX-XXXX"
+                className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                Carrinho
+              </label>
+              {carrinho.length === 0 ? (
+                <div className="text-xs text-[#8b6f63] bg-[#fffdf8] border border-[#e8ddd4] rounded-2xl px-3 py-3 space-y-2">
+                  <p>
+                    Nenhum produto ainda. Volte na aba{" "}
+                    <button
+                      type="button"
+                      className="font-semibold text-[#8b5a47] underline"
+                      onClick={() => setAba("cardapio")}
+                    >
+                      Cardápio
+                    </button>{" "}
+                    e toque em <strong>Adicionar ao pedido</strong>.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-[#fffdf8] border border-[#e8ddd4] rounded-2xl px-3 py-2 max-h-48 overflow-y-auto text-xs space-y-2">
+                  {carrinho.map((item) => {
+                    const p = produtos.find((x) => x.id === item.productId);
+                    const max = p?.quantidade ?? item.quantidade;
+                    return (
+                      <div
+                        key={item.productId}
+                        className="flex items-center justify-between gap-2 border-b border-[#efe4dc] last:border-0 pb-2 last:pb-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[#5c3d33] truncate">
+                            {item.nome}
+                          </p>
+                          <p className="text-[11px] text-[#b08d7a]">
+                            Qtd: {item.quantidade}
+                            {max ? ` · máx. ${max}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              alterarQuantidadeCarrinho(item.productId, -1)
+                            }
+                            className="px-2 py-1 rounded-full bg-white text-[#6b4f3d] text-[11px] font-semibold border border-[#e8ddd4] hover:bg-[#f5ebe3]"
+                          >
+                            -1
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              alterarQuantidadeCarrinho(item.productId, 1)
+                            }
+                            className="px-2 py-1 rounded-full bg-white text-[#6b4f3d] text-[11px] font-semibold border border-[#e8ddd4] hover:bg-[#f5ebe3]"
+                          >
+                            +1
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#8b6f63] mb-1">
+                Observações gerais
+              </label>
+              <textarea
+                value={observacoesGerais}
+                onChange={(e) => setObservacoesGerais(e.target.value)}
+                placeholder="Ex: data da festa, horário de retirada, restrições (sem glúten, sem lactose)..."
+                rows={3}
+                className="w-full px-4 py-3 rounded-2xl border border-[#e8ddd4] bg-[#fffdf8] text-[#5c3d33] placeholder:text-[#c4b5ad] focus:outline-none focus:ring-2 focus:ring-[#c9a227]/50 resize-none text-sm"
+              />
+            </div>
+
+            <div className="text-[11px] text-[#8b6f63] bg-[#fffdf8] border border-[#e8ddd4] rounded-2xl px-3 py-2">
+              <p className="font-semibold mb-1 text-[#5c3d33]">
+                Pagamento via PIX
+              </p>
+              <p>
+                Chave: <span className="font-mono font-bold">{CHAVE_PIX}</span>
+              </p>
+              <p className="mt-1">
+                {tipoEntrega === "entrega"
+                  ? "Será cobrada taxa fixa de R$ 3,00 pela entrega."
+                  : "Para retirada, efetue o pagamento e aguarde a confirmação pelo WhatsApp antes de vir buscar."}
+              </p>
+            </div>
+
+            {mensagem && (
+              <p className="text-[11px] text-[#8b6f63] bg-[#fde8e8] border border-[#f5c4c4] rounded-2xl px-3 py-2">
+                {mensagem}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={enviando}
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-[#8b5a47] to-[#a06b55] text-white font-semibold shadow-lg hover:brightness-105 transition-all disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+            >
+              {enviando ? "Enviando pedido..." : "Enviar pedido"}
+            </button>
           </form>
         )}
       </div>
     </div>
   );
 }
-
