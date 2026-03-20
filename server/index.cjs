@@ -74,7 +74,7 @@ app.use(
     origin: "*",
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
 app.get("/ping", (_req, res) => {
   res.json({ ok: true });
@@ -227,17 +227,15 @@ app.post("/pedidos", (req, res) => {
   if (Array.isArray(pedido.itens) && pedido.itens.length > 0) {
     let alterouEstoque = false;
     pedido.itens.forEach((item) => {
-      if (!item.productId || !item.quantidade) return;
+      if (!item || !item.productId) return;
+      const qtd = Number(item.quantidade);
+      if (!Number.isFinite(qtd) || qtd < 1) return;
       const idx = estoque.findIndex((p) => p.id === item.productId);
       if (idx === -1) return;
       const atual = estoque[idx];
       const preco = Number(atual.precoValor || 0);
-      const qtd = Number(item.quantidade || 0);
       valorTotal += preco * qtd;
-      const novaQtd = Math.max(
-        0,
-        Number(atual.quantidade || 0) - Number(item.quantidade || 0)
-      );
+      const novaQtd = Math.max(0, Number(atual.quantidade || 0) - qtd);
       estoque[idx] = { ...atual, quantidade: novaQtd };
       alterouEstoque = true;
     });

@@ -127,13 +127,19 @@ export default function SweetCatalogView({
                         </p>
                       )}
                       {modo === "cliente" && onAdicionar && (
-                        <button
-                          type="button"
-                          onClick={() => onAdicionar(item.id)}
-                          className="mt-3 self-start font-sans text-xs font-semibold px-4 py-2 rounded-full bg-[#c9a227]/20 text-[#6b4f3d] border border-[#c9a227]/40 hover:bg-[#c9a227]/30 transition-colors"
-                        >
-                          Adicionar ao pedido
-                        </button>
+                        (Number(item.quantidade) || 0) > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => onAdicionar(item.id)}
+                            className="mt-3 self-start font-sans text-xs font-semibold px-4 py-2 rounded-full bg-[#c9a227]/20 text-[#6b4f3d] border border-[#c9a227]/40 hover:bg-[#c9a227]/30 transition-colors"
+                          >
+                            Adicionar ao pedido
+                          </button>
+                        ) : (
+                          <p className="mt-3 font-sans text-[11px] font-medium text-[#b08d7a] italic">
+                            Indisponível no momento (sem estoque)
+                          </p>
+                        )
                       )}
                     </div>
                   </article>

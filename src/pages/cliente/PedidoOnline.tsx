@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "../../lib/api";
 import SweetCatalogView from "../../components/catalog/SweetCatalogView";
 import type { CategoriaCatalogo } from "../../lib/catalog";
@@ -56,6 +56,32 @@ export default function PedidoOnline() {
   const [erroCarregandoProdutos, setErroCarregandoProdutos] = useState<
     string | null
   >(null);
+  const [logoTopoErro, setLogoTopoErro] = useState(false);
+  const [feedbackCatalogo, setFeedbackCatalogo] = useState<string | null>(
+    null
+  );
+  const feedbackCatalogoTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const mostrarFeedbackCatalogo = (texto: string) => {
+    setFeedbackCatalogo(texto);
+    if (feedbackCatalogoTimer.current) {
+      clearTimeout(feedbackCatalogoTimer.current);
+    }
+    feedbackCatalogoTimer.current = setTimeout(() => {
+      setFeedbackCatalogo(null);
+      feedbackCatalogoTimer.current = null;
+    }, 3200);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (feedbackCatalogoTimer.current) {
+        clearTimeout(feedbackCatalogoTimer.current);
+      }
+    };
+  }, []);
 
   const CHAVE_PIX = "07078804597";
   const WHATSAPP_DONA_FORMIGA = "5517991934616";
@@ -72,9 +98,8 @@ export default function PedidoOnline() {
         const resp = await fetch(apiUrl("/estoque"));
         if (!resp.ok) throw new Error("Falha ao carregar estoque");
         const data = (await resp.json()) as ProdutoEstoque[];
-        setProdutos(
-          data.filter((p) => p.ativo !== false && (p.quantidade || 0) > 0)
-        );
+        /* Itens inativos somem; com estoque 0 continuam no cardápio como "indisponível" */
+        setProdutos(data.filter((p) => p.ativo !== false));
       } catch (e) {
         console.error(e);
         setErroCarregandoProdutos(
@@ -107,17 +132,18 @@ export default function PedidoOnline() {
   );
 
   const adicionarAoCarrinho = (produto: ProdutoEstoque) => {
+    const max = Number(produto.quantidade) || 0;
     setCarrinho((atual) => {
       const existente = atual.find((i) => i.productId === produto.id);
       if (existente) {
-        if (existente.quantidade >= produto.quantidade) return atual;
+        if (existente.quantidade >= max) return atual;
         return atual.map((i) =>
           i.productId === produto.id
             ? { ...i, quantidade: i.quantidade + 1 }
             : i
         );
       }
-      if (produto.quantidade <= 0) return atual;
+      if (max <= 0) return atual;
       return [
         ...atual,
         {
@@ -132,7 +158,28 @@ export default function PedidoOnline() {
 
   const adicionarPorId = (id: string) => {
     const produto = produtos.find((p) => p.id === id);
-    if (produto) adicionarAoCarrinho(produto);
+    if (!produto) {
+      mostrarFeedbackCatalogo(
+        "Não encontramos este produto. Atualize a página e tente de novo."
+      );
+      return;
+    }
+    const max = Number(produto.quantidade) || 0;
+    if (max <= 0) {
+      mostrarFeedbackCatalogo(
+        "Este item está sem estoque. Escolha outro ou fale com a confeitaria."
+      );
+      return;
+    }
+    const noCarrinho = carrinho.find((i) => i.productId === id);
+    if (noCarrinho && noCarrinho.quantidade >= max) {
+      mostrarFeedbackCatalogo(
+        "Você já colocou a quantidade máxima disponível deste item."
+      );
+      return;
+    }
+    adicionarAoCarrinho(produto);
+    mostrarFeedbackCatalogo("Adicionado ao pedido!");
   };
 
   const alterarQuantidadeCarrinho = (productId: string, delta: number) => {
@@ -190,7 +237,16 @@ export default function PedidoOnline() {
       });
 
       if (!resp.ok) {
-        throw new Error("Falha ao enviar pedido");
+        let detalhe = "";
+        try {
+          const errBody = await resp.json();
+          if (errBody && typeof errBody.error === "string") {
+            detalhe = ` (${errBody.error})`;
+          }
+        } catch {
+          /* ignore */
+        }
+        throw new Error(`Falha ao enviar pedido (${resp.status})${detalhe}`);
       }
 
       const criado = (await resp.json()) as PedidoCriado;
@@ -267,9 +323,18 @@ export default function PedidoOnline() {
       <div className="relative z-10 w-full max-w-2xl mx-auto px-4 py-10">
         <div className="flex flex-col items-center mb-6">
           <div className="w-20 h-20 rounded-full bg-[#f5ebe3] border-4 border-[#e8ddd4] shadow-inner overflow-hidden flex items-center justify-center mb-3">
-            <span className="font-serif text-2xl font-semibold text-[#8b5a47]">
-              DF
-            </span>
+            {!logoTopoErro ? (
+              <img
+                src="/favicon-dona-formiga.png.png"
+                alt="Donna Formiga"
+                className="w-full h-full object-cover"
+                onError={() => setLogoTopoErro(true)}
+              />
+            ) : (
+              <span className="font-serif text-2xl font-semibold text-[#8b5a47]">
+                DF
+              </span>
+            )}
           </div>
           <p className="text-[10px] tracking-[0.35em] uppercase text-[#b08d7a]">
             Donna Formiga
@@ -440,17 +505,29 @@ export default function PedidoOnline() {
                 {erroCarregandoProdutos}
               </p>
             ) : produtos.length === 0 ? (
-              <p className="text-xs text-[#8b6f63] bg-white/80 border border-[#e8ddd4] rounded-2xl px-4 py-6 text-center">
-                No momento não há produtos disponíveis no cardápio. Volte em
-                breve!
+              <p className="text-xs text-[#8b6f63] bg-white/80 border border-[#e8ddd4] rounded-2xl px-4 py-6 text-center leading-relaxed">
+                Não há itens <strong>ativos</strong> no cardápio. Se você é a
+                confeitaria, cadastre produtos no painel e defina{" "}
+                <strong>estoque</strong> maior que zero na aba Estoque para
+                permitir pedidos.
               </p>
             ) : (
-              <SweetCatalogView
-                produtos={produtosParaCatalogo}
-                modo="cliente"
-                onAdicionar={adicionarPorId}
-                tituloMarca="Donna Formiga"
-              />
+              <>
+                {feedbackCatalogo && (
+                  <p
+                    className="text-xs font-medium text-center text-[#5c3d33] bg-[#e8f5e9] border border-[#c8e6c9] rounded-2xl px-4 py-2.5"
+                    role="status"
+                  >
+                    {feedbackCatalogo}
+                  </p>
+                )}
+                <SweetCatalogView
+                  produtos={produtosParaCatalogo}
+                  modo="cliente"
+                  onAdicionar={adicionarPorId}
+                  tituloMarca="Donna Formiga"
+                />
+              </>
             )}
             <p className="text-center text-[11px] text-[#b08d7a]">
               Depois de escolher, abra a aba <strong>Meu pedido</strong> para

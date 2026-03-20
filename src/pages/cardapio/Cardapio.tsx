@@ -95,7 +95,7 @@ export default function Cardapio() {
           observacoes: observacoes.trim(),
           sabores: sabores.trim(),
           categoria,
-          quantidade: 0,
+          quantidade: 20,
           ativo: true,
           imagemUrl: imagemDataUrl || "",
         }),
