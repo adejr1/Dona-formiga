@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Cardapio from "./pages/cardapio/Cardapio";
 import Home from "./pages/home/Home";
 import Pedidos from "./pages/pedidos/Pedidos";
@@ -7,6 +7,8 @@ import Estoque from "./pages/estoque/Estoque";
 import Gastos from "./pages/gastos/Gastos";
 import PedidoOnline from "./pages/cliente/PedidoOnline";
 import ErrorBoundary from "./components/ErrorBoundary";
+
+const AUTH_KEY = "dona-formiga-authenticated";
 
 type AbaPrincipal =
   | "inicio"
@@ -18,18 +20,87 @@ type AbaPrincipal =
 
 function App() {
   const [abaAtiva, setAbaAtiva] = useState<AbaPrincipal>("inicio");
+  const [autenticado, setAutenticado] = useState(false);
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
 
-  const isClienteView = useMemo(() => {
-    if (typeof window === "undefined") return false;
+  const { isClienteView } = useMemo(() => {
+    if (typeof window === "undefined") return { isClienteView: true };
     const path = window.location.pathname.toLowerCase();
-    return path.includes("cliente") || path.includes("pedido");
+    const isAdminView = path.includes("painel");
+    return { isClienteView: !isAdminView };
   }, []);
+
+  useEffect(() => {
+    if (!isClienteView && typeof sessionStorage !== "undefined") {
+      setAutenticado(sessionStorage.getItem(AUTH_KEY) === "1");
+    }
+  }, [isClienteView]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErro("");
+    const senhaCorreta =
+      import.meta.env.VITE_ADMIN_PASSWORD || "donaformiga2025";
+    if (senha.trim() === senhaCorreta) {
+      sessionStorage.setItem(AUTH_KEY, "1");
+      setAutenticado(true);
+    } else {
+      setErro("Senha incorreta.");
+    }
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem(AUTH_KEY);
+    setAutenticado(false);
+    setSenha("");
+  };
 
   if (isClienteView) {
     return (
       <ErrorBoundary>
         <PedidoOnline />
       </ErrorBoundary>
+    );
+  }
+
+  if (!autenticado) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-rose-100 via-rose-50 to-white flex items-center justify-center p-4">
+        <form
+          onSubmit={handleLogin}
+          className="bg-white rounded-3xl shadow-xl border border-rose-100 p-8 w-full max-w-sm"
+        >
+          <div className="text-center mb-6">
+            <p className="text-xs tracking-widest text-rose-500 uppercase">
+              Dona Formiga
+            </p>
+            <h1 className="text-xl font-bold text-rose-900 mt-1">
+              Acesso ao painel
+            </h1>
+            <p className="text-sm text-rose-600 mt-1">
+              Digite a senha para continuar
+            </p>
+          </div>
+          <input
+            type="password"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            placeholder="Senha"
+            autoFocus
+            className="w-full px-4 py-3 rounded-2xl border border-rose-200 text-rose-900 placeholder:text-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-400 mb-3"
+          />
+          {erro && (
+            <p className="text-sm text-red-600 mb-3">{erro}</p>
+          )}
+          <button
+            type="submit"
+            className="w-full py-3 rounded-2xl bg-rose-600 text-white font-semibold hover:bg-rose-700 transition-colors"
+          >
+            Entrar
+          </button>
+        </form>
+      </div>
     );
   }
 
@@ -41,7 +112,7 @@ function App() {
           <div className="px-5 pt-6 pb-4 border-b border-rose-500/60 flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-rose-300/40 overflow-hidden flex items-center justify-center">
               <img
-                src="/assets/c__Users_User_AppData_Roaming_Cursor_User_workspaceStorage_9b7e95b05d0020946e7c3e29a217bff1_images_WhatsApp_Image_2025-10-08_at_10.18.44-fotor-20251028104826-b5cb606d-134e-4ea8-8363-020ff666ac19.png"
+                src="/favicon-dona-formiga.png.png"
                 alt="Dona Formiga"
                 className="w-full h-full object-cover"
               />
@@ -117,8 +188,17 @@ function App() {
             </button>
           </nav>
 
-          <div className="px-4 pb-4 pt-3 text-[10px] text-rose-100/60 border-t border-rose-500/60">
-            Sistema personalizado para Dona Formiga
+          <div className="px-4 pb-4 pt-3 border-t border-rose-500/60 space-y-2">
+            <p className="text-[10px] text-rose-100/60">
+              Sistema personalizado para Dona Formiga
+            </p>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="text-xs text-rose-200 hover:text-white transition-colors"
+            >
+              Sair
+            </button>
           </div>
         </aside>
 

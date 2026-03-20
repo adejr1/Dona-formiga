@@ -1,2 +1,11 @@
-[]
-
+[
+  {
+    "id": "1773888477544-5jepwv",
+    "nome": "pedaço",
+    "categoria": "doces",
+    "preco": "1",
+    "precoValor": 1,
+    "quantidade": 4,
+    "ativo": true
+  }
+]
